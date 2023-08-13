@@ -22,9 +22,9 @@ class LRULayer(nn.Module):
         self.out_proj = nn.Linear(2*self.d_model, self.d_model, **factory_kwargs)
 
         nu_log, theta_log, gamma_log = self.initializer()
-        self.nu_log = nn.Parameter(nu_log, requires_grad=True, **factory_kwargs)
-        self.theta_log = nn.Parameter(theta_log, requires_grad=True, **factory_kwargs)
-        self.gamma_log = nn.Parameter(gamma_log, requires_grad=True, **factory_kwargs)
+        self.nu_log = nn.Parameter(nu_log, requires_grad=True)
+        self.theta_log = nn.Parameter(theta_log, requires_grad=True)
+        self.gamma_log = nn.Parameter(gamma_log, requires_grad=True)
 
         self.swish =  nn.SiLU()
 

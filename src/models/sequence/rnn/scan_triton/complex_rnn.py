@@ -4,6 +4,8 @@ import triton
 import triton.language as tl
 from torch.autograd import Function
 
+BLOCK_SZ = 32
+
 
 @triton.jit
 def fwd_sequential_scan_complex(
@@ -117,7 +119,7 @@ class TritonSequentialScan_Complex(Function):
     def forward(ctx, v_real, v_imag, f_real, f_imag):
         B,L,C = v_real.shape
         num_warps = 8
-        assert C % 256 == 0, 'Hidden dimension must be multiple of 256'
+        assert C % BLOCK_SZ == 0, 'Hidden dimension must be multiple of BLOCK_SZ'
         v_real = v_real.contiguous()
         v_imag = v_imag.contiguous()
         f_real = f_real.contiguous()
@@ -126,7 +128,7 @@ class TritonSequentialScan_Complex(Function):
         hidden_real = torch.zeros_like(v_real).contiguous()
         hidden_imag = torch.zeros_like(v_imag).contiguous()
                                     
-        fwd_sequential_scan_complex[(B, int(C/256))](
+        fwd_sequential_scan_complex[(B, int(C/BLOCK_SZ))](
             v_real,
             v_imag,
             f_real,
@@ -136,7 +138,7 @@ class TritonSequentialScan_Complex(Function):
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
 
@@ -153,7 +155,7 @@ class TritonSequentialScan_Complex(Function):
         num_warps = 8
 
 
-        bwd_sequential_scan_complex[(B,  int(C/256))](
+        bwd_sequential_scan_complex[(B,  int(C/BLOCK_SZ))](
             grad_output_real, 
             grad_output_imag,
 
@@ -167,7 +169,7 @@ class TritonSequentialScan_Complex(Function):
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
         return v_real, v_imag, f_real, f_imag

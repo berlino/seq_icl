@@ -4,6 +4,8 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Function
 
+BLOCK_SZ = 32
+
 # input: (B, L, D)
 @triton.jit
 def fwd_sequential_scan(
@@ -43,7 +45,6 @@ def fwd_sequential_scan_fused(
     C, 
     BLOCK_M: tl.constexpr,
 ):
-    
     offset_b = tl.program_id(0)
     
     if offset_b >= B:
@@ -66,12 +67,9 @@ def fwd_sequential_scan_fused(
 @triton.jit
 def bwd_sequential_scan(
     grad_output,
-    
     v,
     f,
-
     h,
-
     B,
     L,
     C, 
@@ -91,9 +89,7 @@ def bwd_sequential_scan(
     grad_h = tl.zeros([BLOCK_M,], dtype=tl.float32)
 
     for time_step in range(L-1, -1, -1):        
-
         grad = tl.load(grad_output + ptr).to(tl.float32)                    
-
         grad_h += grad
 
         decay = tl.load(f + ptr).to(tl.float32)
@@ -118,20 +114,15 @@ def bwd_sequential_scan(
 @triton.jit
 def bwd_sequential_scan_fused(
     grad_output,
-    
     v,
     f,
-
     h,
-
     B,
     L,
     C, 
     BLOCK_M: tl.constexpr,
 ):
-    
     offset_b = tl.program_id(0)
-    
     if offset_b >= B:
         return
 
@@ -142,7 +133,6 @@ def bwd_sequential_scan_fused(
     grad_h = tl.zeros([BLOCK_M,], dtype=tl.float32)
 
     for time_step in range(L-1, -1, -1):        
-
         grad = tl.load(grad_output + ptr).to(tl.float32)                    
 
         grad_h += grad
@@ -162,7 +152,6 @@ def bwd_sequential_scan_fused(
 
         grad_h *= decay        
 
-
         ptr -= C        
 
 
@@ -172,19 +161,19 @@ class TritonSequentialScan(Function):
     def forward(ctx, v, f1):
         B,L,C = v.shape
         num_warps = 8
-        assert C % 256 == 0
+        assert C % BLOCK_SZ == 0
         v = v.contiguous()
         f1 = f1.contiguous()
         hidden =  torch.zeros_like(v).contiguous()
                                     
-        fwd_sequential_scan[(B, int(C/256) )](
+        fwd_sequential_scan[(B, int(C/BLOCK_SZ) )](
             v,
             f1,
             hidden,
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
 
@@ -199,7 +188,7 @@ class TritonSequentialScan(Function):
         
         num_warps = 8
 
-        bwd_sequential_scan[(B,  int(C/256))](
+        bwd_sequential_scan[(B,  int(C/BLOCK_SZ))](
             grad_output,                 
             v,
             f1,
@@ -207,7 +196,7 @@ class TritonSequentialScan(Function):
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
         return v, f1
@@ -219,19 +208,19 @@ class TritonSequentialScanFused(Function):
     def forward(ctx, v, f1):
         B,L,C = v.shape
         num_warps = 8
-        assert C % 256 == 0
+        assert C % BLOCK_SZ == 0
         v = v.contiguous()
         f1 = f1.contiguous()
         hidden =  torch.zeros_like(v).contiguous()
                                     
-        fwd_sequential_scan_fused[(B, int(C/256) )](
+        fwd_sequential_scan_fused[(B, int(C/BLOCK_SZ) )](
             v,
             f1,
             hidden,
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
 
@@ -246,7 +235,7 @@ class TritonSequentialScanFused(Function):
         
         num_warps = 8
 
-        bwd_sequential_scan_fused[(B,  int(C/256))](
+        bwd_sequential_scan_fused[(B,  int(C/BLOCK_SZ))](
             grad_output,                 
             v,
             f1,
@@ -254,7 +243,7 @@ class TritonSequentialScanFused(Function):
             B,
             L,
             C, 
-            BLOCK_M=256,
+            BLOCK_M=BLOCK_SZ,
             num_warps=num_warps
         )
         return v, f1

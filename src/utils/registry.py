@@ -39,7 +39,7 @@ layer = {
     "hyena-filter": "src.models.sequence.hyena.HyenaFilter",
     "vit": "src.models.sequence.mha.VitAttention",
     "gilr": "src.models.sequence.rnn.gilr.GILRLayer",
-    "lru": "src.models.sequence.lru.LRULayer",
+    "lru": "src.models.sequence.rnn.lru.LRULayer",
 }
 
 callbacks = {
