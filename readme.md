@@ -9,9 +9,9 @@ python -m train experiment=synthetics/associative_recall/gilr
 python -m train experiment=synthetics/associative_recall/lru
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU |
-|---|---|---|---|---|---|
-| Test Accuracy |  1.0 | 32.4 | 98.2  | 50.2  | 11.6 |
+| | Transformer | S4D | H3 | GILR | LRU | Random 
+|---|:---:|:---:|:---:|:---:|:---:| :---:|
+| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 25.0 | 
 
 ### Experiments on Induction Head
 
@@ -23,9 +23,9 @@ python -m train experiment=synthetics/induction_head/gilr
 python -m train experiment=synthetics/induction_head/lru
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU |
-|---|---|---|---|---|---|
-| Test Accuracy | 97.2 | 8.8  | 1.0   | 6.2  | 4.8 |
+| | Transformer | S4D | H3 | GILR | LRU | Random |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 5.0 |
 
 
 ## Notes
