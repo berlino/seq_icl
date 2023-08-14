@@ -105,7 +105,7 @@ class Vocab:
         self.non_special_vocab = sorted(list(vocab))
         self.vocab = sorted(list(set(vocab + list(self.special_vocabs.values()))))
         self.v2id = {v: i for i, v in enumerate(self.vocab)}
-        self.vocab_size = len(vocab)
+        self.vocab_size = len(self.vocab)
 
     def get_next_vocab(self, token: str):
         """Gets next token excluding special_vocabs."""
@@ -201,7 +201,7 @@ class ICLDFADataModule(SequenceDataset):
         special_vocabs = {"seperator": "|", "noop": "."}
         self.special_vocabs = special_vocabs
         self.vocab = Vocab(
-            vocab_size, special_vocabs=special_vocabs
+            vocab_size-2, special_vocabs=special_vocabs
         )
         self.tokenizer = Tokenizer(self.vocab)
 
