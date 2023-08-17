@@ -5,7 +5,7 @@ defaults:
 
 model:
   _name_: lm_simple
-  d_model: 32
+  d_model: 128
   n_layer: 2
   d_inner: ${eval:4 * ${.d_model}}
   vocab_size: ${dataset.vocab_size}
