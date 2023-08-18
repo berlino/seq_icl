@@ -102,12 +102,18 @@ class CustomWandbLogger(WandbLogger):
                 self._experiment = wandb.run
             elif attach_id is not None and hasattr(wandb, "_attach"):
                 # attach to wandb process referenced
+                print("Here, we are in the attach")
+                print("attach_id: ", attach_id)
                 self._experiment = wandb._attach(attach_id)
+                print("self._experiment: ", self._experiment)
             else:
                 # create new wandb process
+                print("Here, we are in the custom wandb logger.")
+                print("self._wandb_init: ", self._wandb_init)
                 while True:
                     try:
                         self._experiment = wandb.init(**self._wandb_init)
+                        print("self._experiment: ", self._experiment)
                         break
                     except Exception as e:
                         print("wandb Exception:\n", e)
@@ -669,11 +675,13 @@ def create_trainer(config, **kwargs):
         # Can pass in config_exclude_keys='wandb' to remove certain groups
         import wandb
 
-        logger = CustomWandbLogger(
+        logger = WandbLogger(
             config=utils.to_dict(config, recursive=True),
             settings=wandb.Settings(start_method="fork"),
             **config.wandb,
         )
+
+
 
     # Lightning callbacks
     if "callbacks" in config:
