@@ -6,7 +6,7 @@ metric:
   goal: maximize
 parameters:
   experiment:
-    values: ["dfa/transformer", "dfa/h3", "dfa/s4d"]
+    values: ["dfa/h3"]
   model.d_model:
     values: [128, 64, 32]
   model.n_layer:
