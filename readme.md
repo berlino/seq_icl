@@ -8,11 +8,12 @@ python -m train experiment=synthetics/associative_recall/h3
 python -m train experiment=synthetics/associative_recall/gilr
 python -m train experiment=synthetics/associative_recall/lru
 python -m train experiment=synthetics/associative_recall/lstm
+python -m train experiment=synthetics/associative_recall/rwkv
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU | LSTM | Random 
-|---|:---:|:---:|:---:|:---:|:---:| :---:|
-| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 36.2 | 25.0 |
+| | Transformer | S4D | H3 | GILR | LRU | LSTM | RWKV | Random 
+|---|:---:|:---:|:---:|:---:|:---:| :---:|:---:|:---:|
+| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 36.2 | 30.0 | 25.0 |
 
 ### Experiments on Induction Head
 
@@ -23,11 +24,12 @@ python -m train experiment=synthetics/induction_head/h3
 python -m train experiment=synthetics/induction_head/gilr
 python -m train experiment=synthetics/induction_head/lru
 python -m train experiment=synthetics/induction_head/lstm
+python -m train experiment=synthetics/induction_head/rwkv
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU | LSTM | Random |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 4.8 | 5.0 |
+| | Transformer | S4D | H3 | GILR | LRU | LSTM | RWKV | Random |
+|---|:---:|:---:|:---:|:---:|:---:|:---:| :---:|:---:|
+| Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 4.8 | 6.0 | 5.0 |
 
 
 ## Notes
@@ -43,4 +45,4 @@ python -m train experiment=synthetics/induction_head/lstm
 
 ### Acknowledgements
 
-This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main).
+This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main). Triton implementations are taken from 

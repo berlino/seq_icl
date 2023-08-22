@@ -41,6 +41,7 @@ layer = {
     "gilr": "src.models.sequence.rnn.gilr.GILRLayer",
     "lru": "src.models.sequence.rnn.lru.LRULayer",
     "lstm": "src.models.sequence.rnn.lstm.LSTMLayer",
+    "rwkv": "src.models.sequence.rnn.rwkv.RWKVLayer",
 }
 
 callbacks = {
