@@ -40,6 +40,7 @@ layer = {
     "vit": "src.models.sequence.mha.VitAttention",
     "gilr": "src.models.sequence.rnn.gilr.GILRLayer",
     "lru": "src.models.sequence.rnn.lru.LRULayer",
+    "lstm": "src.models.sequence.rnn.lstm.LSTMLayer",
 }
 
 callbacks = {

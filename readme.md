@@ -7,11 +7,12 @@ python -m train experiment=synthetics/associative_recall/s4d
 python -m train experiment=synthetics/associative_recall/h3
 python -m train experiment=synthetics/associative_recall/gilr
 python -m train experiment=synthetics/associative_recall/lru
+python -m train experiment=synthetics/associative_recall/lstm
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU | Random 
+| | Transformer | S4D | H3 | GILR | LRU | LSTM | Random 
 |---|:---:|:---:|:---:|:---:|:---:| :---:|
-| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 25.0 | 
+| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | False | 25.0 |
 
 ### Experiments on Induction Head
 
@@ -21,11 +22,12 @@ python -m train experiment=synthetics/induction_head/s4d
 python -m train experiment=synthetics/induction_head/h3
 python -m train experiment=synthetics/induction_head/gilr
 python -m train experiment=synthetics/induction_head/lru
+python -m train experiment=synthetics/induction_head/lstm
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU | Random |
+| | Transformer | S4D | H3 | GILR | LRU | LSTM | Random |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
-| Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 5.0 |
+| Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 4.8 | 5.0 |
 
 
 ## Notes
