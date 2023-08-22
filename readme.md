@@ -12,7 +12,7 @@ python -m train experiment=synthetics/associative_recall/lstm
 
 | | Transformer | S4D | H3 | GILR | LRU | LSTM | Random 
 |---|:---:|:---:|:---:|:---:|:---:| :---:|
-| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | False | 25.0 |
+| Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 36.2 | 25.0 |
 
 ### Experiments on Induction Head
 
