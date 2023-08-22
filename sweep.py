@@ -48,10 +48,11 @@ if __name__ == "__main__":
 
     config = get_config("sweeps/hyper.yaml")
     sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/"
+    sweep_folder = "hyper/h3/"
     os.makedirs(sweep_folder, exist_ok=True)
+    hash_offset = 128
 
-    gpus = {id: None for id in range(10)}
+    gpus = {id: None for id in [10, 11, 12, 13]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -60,20 +61,27 @@ if __name__ == "__main__":
                 if is_free(gpu_id):
                     if gpus[gpu_id] is not None:
                         sweep_hash = gpus[gpu_id]
-                        if os.path.exists(f"hyper/{sweep_hash}.done"):
+                        if os.path.exists(f"{sweep_folder}/{sweep_hash}.done"):
                             gpus[gpu_id] = None
 
                     if gpus[gpu_id] is None:
-                        sweep_hash = hash(sweep)
+                        sweep_hash = hash(sweep) + hash_offset
                         gpus[gpu_id] = sweep_hash
                         print(f"CUDA_VISIBLE_DEVICES={gpu_id} python train.py {sweep}")
-                        proc = Popen([
-                                f"CUDA_VISIBLE_DEVICES={gpu_id} python train.py {sweep} 1>"
-                                f" hyper/{sweep_hash}.log 2> hyper/{sweep_hash}.err; touch"
-                                f" hyper/{sweep_hash}.done"], shell=True)
+                        proc = Popen(
+                            [
+                                f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c"
+                                ' "import pykeops; pykeops.clean_pykeops()"; python'
+                                f" train.py {sweep} 1> {sweep_folder}/{sweep_hash}.log 2>"
+                                f" {sweep_folder}/{sweep_hash}.err; touch"
+                                f" {sweep_folder}/{sweep_hash}.done"
+                            ],
+                            shell=True,
+                        )
                         submitted = True
                         break
                 else:
-                    print(f"GPU {gpu_id} is not free")
+                    pass
+                    # print(f"GPU {gpu_id} is not free")
             if not submitted:
                 time.sleep(10)

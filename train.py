@@ -749,8 +749,8 @@ def main(config: OmegaConf):
 
     # Pretty print config using Rich library
     utils.train.print_config(config, resolve=True)
-
     train(config)
+
 
 
 if __name__ == "__main__":
