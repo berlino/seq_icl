@@ -45,7 +45,6 @@ def is_free(gpu_id):
 
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
-
     config = get_config("sweeps/data_size.yaml")
     sweeps = get_sweep(get_config("sweeps/data_size.yaml"))
     sweep_folder = "hyper/data_size/"

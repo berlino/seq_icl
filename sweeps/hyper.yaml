@@ -6,11 +6,11 @@ metric:
   goal: maximize
 parameters:
   experiment:
-    values: ["dfa/lstm"]
+    values: ["dfa/h3"]
   model.d_model:
-    values: [512, 256, 128, 64, 32]
+    values: [128, 64, 32]
   model.n_layer:
-    values: [2, 4, 8]
+    values: [8, 4, 2]
   optimizer.lr:
     values: [0.0005, 0.00025, 0.0001, 0.001]
   optimizer.weight_decay:
