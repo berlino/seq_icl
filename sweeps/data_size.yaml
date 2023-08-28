@@ -5,16 +5,18 @@ metric:
   name: test/dfa_accuracy
   goal: maximize
 parameters:
-  experiment:
-    values: ["dfa/lstm"]
   model.d_model:
-    values: [512, 256, 128, 64, 32]
+    values: [512]
   model.n_layer:
-    values: [2, 4, 8]
+    values: [2, 8]
   optimizer.lr:
-    values: [0.0005, 0.00025, 0.0001, 0.001]
+    values: [0.00025]
   optimizer.weight_decay:
-    values: [0.1, 0.001, 0.0001]
+    values: [0.001]
+  dataset.num_examples:
+    values: [100, 1000, 2500, 5000, 10000, 20000]
+  experiment:
+    values: ["dfa/lstm", "dfa/transformer", "dfa/h3", "dfa/s4d"]
 
 command:
   - ${env}

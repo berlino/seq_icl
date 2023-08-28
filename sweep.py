@@ -46,13 +46,13 @@ def is_free(gpu_id):
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
 
-    config = get_config("sweeps/hyper.yaml")
-    sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/h3/"
+    config = get_config("sweeps/data_size.yaml")
+    sweeps = get_sweep(get_config("sweeps/data_size.yaml"))
+    sweep_folder = "hyper/data_size/"
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 128
 
-    gpus = {id: None for id in [10, 11, 12, 13]}
+    gpus = {id: None for id in [8, 11, 14, 15]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -67,15 +67,13 @@ if __name__ == "__main__":
                     if gpus[gpu_id] is None:
                         sweep_hash = hash(sweep) + hash_offset
                         gpus[gpu_id] = sweep_hash
-                        print(f"CUDA_VISIBLE_DEVICES={gpu_id} python train.py {sweep}")
+                        command = (
+                            f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="seq-icl-data-size" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                        )
+                        print(command)
                         proc = Popen(
-                            [
-                                f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c"
-                                ' "import pykeops; pykeops.clean_pykeops()"; python'
-                                f" train.py {sweep} 1> {sweep_folder}/{sweep_hash}.log 2>"
-                                f" {sweep_folder}/{sweep_hash}.err; touch"
-                                f" {sweep_folder}/{sweep_hash}.done"
-                            ],
+                            [command],
                             shell=True,
                         )
                         submitted = True

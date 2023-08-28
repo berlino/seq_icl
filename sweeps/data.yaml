@@ -6,15 +6,19 @@ metric:
   goal: maximize
 parameters:
   experiment:
-    values: ["dfa/lstm"]
+    values: ["dfa/lstm", "dfa/transformer", "dfa/h3", "dfa/s4d"]
   model.d_model:
-    values: [512, 256, 128, 64, 32]
+    values: [512]
   model.n_layer:
-    values: [2, 4, 8]
+    values: [8]
   optimizer.lr:
-    values: [0.0005, 0.00025, 0.0001, 0.001]
+    values: [0.00025]
   optimizer.weight_decay:
-    values: [0.1, 0.001, 0.0001]
+    values: [0.001]
+  dataset.max_num_nodes:
+    values: [3, 5, 9, 17]
+  dataset.max_len_per_example:
+    values: [2, 8, 16, 32, 64]
 
 command:
   - ${env}
