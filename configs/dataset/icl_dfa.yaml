@@ -1,0 +1,13 @@
+_name_: icl_dfa
+num_examples: 5000
+num_test_examples: 500
+vocab_size: 20
+max_num_nodes: 10
+max_num_in_context_examples: 20
+min_num_in_context_examples: 10
+max_outgoing_edges: 5
+max_len_per_example: 50
+input_seq_len: 4096 # FIXME: we don't have predetermined sequence length
+copy_method: "assoc_recall"
+__train_len: ${.num_examples}
+__l_max: ${eval:${.input_seq_len} + 2}

@@ -1,0 +1,27 @@
+program: train.py
+method: grid
+name: hyper
+metric:
+  name: test/dfa_accuracy
+  goal: maximize
+parameters:
+  experiment:
+    values: ["dfa/lstm", "dfa/transformer", "dfa/h3", "dfa/s4d"]
+  model.d_model:
+    values: [512]
+  model.n_layer:
+    values: [8]
+  optimizer.lr:
+    values: [0.00025]
+  optimizer.weight_decay:
+    values: [0.001]
+  dataset.max_num_nodes:
+    values: [3, 5, 9, 17]
+  dataset.max_len_per_example:
+    values: [2, 8, 16, 32, 64]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

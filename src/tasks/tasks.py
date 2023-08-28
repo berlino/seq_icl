@@ -72,7 +72,7 @@ class BaseTask:
                 tracked_torchmetrics[name] = getattr(tm, mname)(average='macro', num_classes=self.dataset.d_output, compute_on_step=False, top_k=k).to('cuda')
             else:
                 tracked_torchmetrics[name] = getattr(tm, name)(compute_on_step=False).to('cuda')
-        
+
         return tracked_torchmetrics
 
     def _reset_torchmetrics(self, prefix=None):
@@ -169,16 +169,41 @@ class LMTask(BaseTask):
         else:
             assert len(z) == 1 and isinstance(z[0], dict), "Dataloader must return dictionary of extra arguments"
             z = z[0]
-        x, w = encoder(x, **z) # w can model-specific constructions such as key_padding_mask for transformers or state for RNNs
+        x, w = encoder(x) # w can model-specific constructions such as key_padding_mask for transformers or state for RNNs
         x, state = model(x, **w, state=_state)
         self._state = state
-        x, w = decoder(x, state=state, **z)
+        x, w = decoder(x, state=state)
 
         x = x.logits
         x = rearrange(x, '... C -> (...) C')
         y = rearrange(y, '... -> (...)')
 
         return x, y, w
+
+class DFALMTask(LMTask):
+    def forward(self, batch, encoder, model, decoder, _state):
+        """Passes a batch through the encoder, backbone, and decoder"""
+        # z holds arguments such as sequence length
+        x, y, *z = batch # z holds extra dataloader info such as resolution
+
+        if len(z) == 0:
+            z = {}
+        else:
+            assert len(z) == 1 and len(z[0]) == x.shape[0], "Dataloader must return list of dfas"
+            z = z[0]
+
+        x, w = encoder(x) # w can model-specific constructions such as key_padding_mask for transformers or state for RNNs
+        x, state = model(x, **w, state=_state)
+        self._state = state
+        x, w = decoder(x, state=state)
+
+        x = x.logits
+        # x = rearrange(x, '... C -> (...) C')
+        # y = rearrange(y, '... -> (...)')
+        w["dfas"] = z
+        return x, y, w
+
+
 
 class ForecastingTask(BaseTask):
 
@@ -365,6 +390,7 @@ class ImageNetTask(BaseTask):
 registry = {
     'base': BaseTask,
     'lm': LMTask,
+    "dfalm": DFALMTask,
     'imagenet': ImageNetTask,
     'forecasting': ForecastingTask,
     'video': VideoTask,

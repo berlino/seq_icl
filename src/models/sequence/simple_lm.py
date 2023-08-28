@@ -214,7 +214,7 @@ class Block(nn.Module):
 
     def __init__(self, dim, mixer_cls=None, mlp_cls=None, norm_cls=nn.LayerNorm,
                  dropout_cls=nn.Dropout, prenorm=True, resid_dropout1=0., resid_dropout2=0.,
-                 drop_path1=0., drop_path2=0., 
+                 drop_path1=0., drop_path2=0.,
                  return_residual=False,
                  residual_in_fp32=False):
         """

@@ -1,0 +1,23 @@
+program: train.py
+method: grid
+name: hyper
+metric:
+  name: test/dfa_accuracy
+  goal: maximize
+parameters:
+  experiment:
+    values: ["dfa/h3"]
+  model.d_model:
+    values: [128, 64, 32]
+  model.n_layer:
+    values: [8, 4, 2]
+  optimizer.lr:
+    values: [0.0005, 0.00025, 0.0001, 0.001]
+  optimizer.weight_decay:
+    values: [0.1, 0.001, 0.0001]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}
