@@ -105,7 +105,7 @@ class Vocab:
     def __init__(self, vocab_size: int, special_vocabs: Dict):
         # Special tokens hold seperator and noop/pad token etc
         self.special_vocabs = special_vocabs
-        vocab = [str(v) for v in list(range(vocab_size))]
+        vocab = [chr(v+97) for v in list(range(vocab_size))]
         self.non_special_vocab = sorted(list(vocab))
         self.vocab = sorted(list(set(vocab + list(self.special_vocabs.values()))))
         self.v2id = {v: i for i, v in enumerate(self.vocab)}
@@ -170,11 +170,12 @@ class Tokenizer:
 
 
 class SimpleDataset(Dataset):
-    def __init__(self, examples, dfas):
+    def __init__(self, examples, dfas, tokenizer):
         super().__init__()
         self.inputs = examples[0]
         self.targets = examples[1]
         self.dfas = dfas
+        self.tokenizer = tokenizer
 
     def __len__(self):
         return len(self.inputs)
@@ -231,7 +232,7 @@ class ICLDFADataModule(SequenceDataset):
     def generate_example(self, dfa: DFA, num_examples: int):
         example = ""
         for _ in range(num_examples):
-            length = self.rng.integers(self.max_len_per_example)
+            length = self.rng.integers(1, self.max_len_per_example)
             word = dfa.sample(length=length)
             example += word + " | "
         example = example[:-3]
@@ -249,15 +250,16 @@ class ICLDFADataModule(SequenceDataset):
 
         DFAs = set([])
         for _ in range(self.num_examples * 10):
-            num_nodes = self.rng.integers(2, self.max_num_nodes)
-            alphabet = self.rng.choice(self.vocab_size-2, size=num_nodes, replace=False)
-            alphabet = tuple((str(a) for a in alphabet))
+            num_nodes = self.rng.integers(2, self.max_num_nodes + 1)
+            num_alphabet = self.rng.integers(self.max_outgoing_edges, self.vocab_size - 2 + 1)
+            alphabet = self.rng.choice(self.vocab_size-2, size=num_alphabet, replace=False)
+            alphabet = tuple((chr(a + 97) for a in alphabet))
             sampler = RandomDFASampler(
                 num_nodes,
                 alphabet,
-                min(self.max_outgoing_edges, len(alphabet)),
+                self.max_outgoing_edges,
             )
-            sampler.rng = self.rng
+            sampler.rng = np.random.default_rng(self.rng.integers(0, 2**32))
             dfa = sampler.sample()
             DFAs.add(dfa)
             if len(DFAs) >= self.num_examples + self.num_test_examples:
@@ -312,8 +314,8 @@ class ICLDFADataModule(SequenceDataset):
             examples[split] = (example_inputs, example_outputs)
 
         self.dataset = {
-            "train": SimpleDataset(examples=examples["train"], dfas=DFAs["train"]),
-            "test": SimpleDataset(examples=examples["test"], dfas=DFAs["test"]),
+            "train": SimpleDataset(examples=examples["train"], dfas=DFAs["train"], tokenizer=self.tokenizer),
+            "test": SimpleDataset(examples=examples["test"], dfas=DFAs["test"], tokenizer=self.tokenizer),
         }
 
     def _collate_fn(self, batch):

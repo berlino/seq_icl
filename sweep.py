@@ -14,8 +14,16 @@ def get_config(file):
 
 def create_flags(options):
     flags = ""
+    istransformer = False
+    for key, value in options:
+        if key == "experiment" and "transformer" in value:
+            istransformer = True
+
     for key, value in options:
         flags += f"{key}={value} "
+        if istransformer and "model.n_layer" in key:
+            attn_layer_idx = str(list(range(value)))
+            flags += f"model.attn_layer_idx=\"{attn_layer_idx}\" "
     return flags.strip()
 
 
@@ -45,13 +53,13 @@ def is_free(gpu_id):
 
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
-    config = get_config("sweeps/data_size.yaml")
-    sweeps = get_sweep(get_config("sweeps/data_size.yaml"))
-    sweep_folder = "hyper/data_size/"
+    config = get_config("sweeps/hyper.yaml")
+    sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
+    sweep_folder = "hyper/fixes/hyper"
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 128
 
-    gpus = {id: None for id in [8, 11, 14, 15]}
+    gpus = {id: None for id in [2, 3, 4, 5, 10, 11, 12, 13, 14, 15]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -68,7 +76,7 @@ if __name__ == "__main__":
                         gpus[gpu_id] = sweep_hash
                         command = (
                             f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="seq-icl-data-size" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="fixes-hyper" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
                         )
                         print(command)
                         proc = Popen(

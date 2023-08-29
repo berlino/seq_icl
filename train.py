@@ -180,6 +180,8 @@ class SequenceLightningModule(pl.LightningModule):
 
         # Instantiate model
         self.model = utils.instantiate(registry.model, self.hparams.model)
+
+
         if (name := self.hparams.train.post_init_hook["_name_"]) is not None:
             kwargs = self.hparams.train.post_init_hook.copy()
             del kwargs["_name_"]
@@ -211,6 +213,26 @@ class SequenceLightningModule(pl.LightningModule):
         self.train_torchmetrics = self.task.train_torchmetrics
         self.val_torchmetrics = self.task.val_torchmetrics
         self.test_torchmetrics = self.task.test_torchmetrics
+
+        for name, dataloader in zip(*self._eval_dataloaders()):
+            dataset = dataloader.dataset
+            tokenizer = dataset.tokenizer
+            with open(f"/raid/lingo/akyurek/git/iclmodels/samples/{name}.txt", "w") as f:
+                for index in range(len(dataset)):
+                    data = dataset[index]
+                    x, y, dfa = data
+                    print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+        train_dataloader = self.train_dataloader()
+        dataset = train_dataloader.dataset
+        tokenizer = dataset.tokenizer
+        with open(f"/raid/lingo/akyurek/git/iclmodels/samples/train.txt", "w") as f:
+            for index in range(len(dataset)):
+                data = dataset[index]
+                x, y, dfa = data
+                print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+
+
+
 
     def load_state_dict(self, state_dict, strict=True):
         if self.hparams.train.pretrained_model_state_hook["_name_"] is not None:
@@ -380,6 +402,8 @@ class SequenceLightningModule(pl.LightningModule):
             loss = self.loss(x, y, **w)
         else:
             loss = self.loss_val(x, y, **w)
+
+
         # Metrics
         metrics = self.metrics(x, y, **w)
         metrics["loss"] = loss
