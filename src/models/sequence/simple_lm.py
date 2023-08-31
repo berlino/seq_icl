@@ -431,7 +431,6 @@ class LMBackbone(nn.Module):
 
 
 class SimpleLMHeadModel(nn.Module):
-
     def __init__(self, d_model: int, n_layer: int, d_inner: int, vocab_size: int,
                  layer=None,
                  attn_layer_idx=None, attn_cfg=None, max_position_embeddings=0,
@@ -464,6 +463,46 @@ class SimpleLMHeadModel(nn.Module):
 
     def forward(self, input_ids, position_ids=None, state=None): # state for the repo interface
         hidden_states = self.backbone(input_ids, position_ids=position_ids)
+        lm_logits = self.lm_head(hidden_states)
+        CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
+        return CausalLMOutput(logits=lm_logits), None
+
+
+class SimpleLMHeadModelNoFFN(nn.Module):
+    """
+    Same as SimpleLMHeadModel but without the MLP in the Transformer block, suitable for LSTM. 
+    """
+
+    def __init__(self, d_model: int, vocab_size: int,
+                 layer=None, max_position_embeddings=-1,
+                 embed_dropout: float = 0.1,
+                 pad_vocab_size_multiple: int = 1,
+                 device=None, dtype=None, **kwargs) -> None:
+        """
+        Args:
+            max_position_embeddings: if <= 0, no position embeddings
+        """
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super().__init__()
+
+        if vocab_size % pad_vocab_size_multiple != 0:
+            vocab_size += pad_vocab_size_multiple - (vocab_size % pad_vocab_size_multiple)
+        self.embeddings = GPT2Embeddings(d_model, vocab_size, max_position_embeddings,                                              **factory_kwargs)
+        self.embed_dropout = nn.Dropout(embed_dropout)
+
+        mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=None, **factory_kwargs)
+        self.mixer = mixer_cls(d_model)
+        
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
+        self.tie_weights()
+
+    def tie_weights(self):
+        self.lm_head.weight = self.embeddings.word_embeddings.weight
+
+    def forward(self, input_ids, position_ids=None, state=None): # state for the repo interface
+        embeddings = self.embeddings(input_ids, position_ids=position_ids)
+        embeddings = self.embed_dropout(embeddings)
+        hidden_states = self.mixer(embeddings)
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
         return CausalLMOutput(logits=lm_logits), None

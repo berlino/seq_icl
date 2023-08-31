@@ -23,6 +23,7 @@ model = {
     "model": "src.models.sequence.SequenceModel",
     "lm": "src.models.sequence.long_conv_lm.ConvLMHeadModel",
     "lm_simple": "src.models.sequence.simple_lm.SimpleLMHeadModel",
+    "lm_simple_noffn": "src.models.sequence.simple_lm.SimpleLMHeadModelNoFFN",
     "vit_b_16": "src.models.baselines.vit_all.vit_base_patch16_224",
 }
 
