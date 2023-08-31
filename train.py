@@ -217,7 +217,7 @@ class SequenceLightningModule(pl.LightningModule):
         for name, dataloader in zip(*self._eval_dataloaders()):
             dataset = dataloader.dataset
             tokenizer = dataset.tokenizer
-            with open(f"/raid/lingo/akyurek/git/iclmodels/samples/{name}.txt", "w") as f:
+            with open(f"samples/{name}.txt", "w") as f:
                 for index in range(len(dataset)):
                     data = dataset[index]
                     x, y, dfa = data
@@ -225,7 +225,7 @@ class SequenceLightningModule(pl.LightningModule):
         train_dataloader = self.train_dataloader()
         dataset = train_dataloader.dataset
         tokenizer = dataset.tokenizer
-        with open(f"/raid/lingo/akyurek/git/iclmodels/samples/train.txt", "w") as f:
+        with open(f"samples/train.txt", "w") as f:
             for index in range(len(dataset)):
                 data = dataset[index]
                 x, y, dfa = data
