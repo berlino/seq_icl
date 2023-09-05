@@ -157,6 +157,7 @@ class SequenceLightningModule(pl.LightningModule):
 
         self.setup()  ## Added by KS
 
+
     def setup(self, stage=None):
         if not self.hparams.train.disable_dataset:
             self.dataset.setup()
@@ -214,22 +215,22 @@ class SequenceLightningModule(pl.LightningModule):
         self.val_torchmetrics = self.task.val_torchmetrics
         self.test_torchmetrics = self.task.test_torchmetrics
 
-        for name, dataloader in zip(*self._eval_dataloaders()):
-            dataset = dataloader.dataset
-            tokenizer = dataset.tokenizer
-            with open(f"samples/{name}.txt", "w") as f:
-                for index in range(len(dataset)):
-                    data = dataset[index]
-                    x, y, dfa = data
-                    print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
-        train_dataloader = self.train_dataloader()
-        dataset = train_dataloader.dataset
-        tokenizer = dataset.tokenizer
-        with open(f"samples/train.txt", "w") as f:
-            for index in range(len(dataset)):
-                data = dataset[index]
-                x, y, dfa = data
-                print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+        # for name, dataloader in zip(*self._eval_dataloaders()):
+        #     dataset = dataloader.dataset
+        #     tokenizer = dataset.tokenizer
+        #     with open(f"./samples/{name}.txt", "w") as f:
+        #         for index in range(len(dataset)):
+        #             data = dataset[index]
+        #             x, y, dfa = data
+        #             print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+        # train_dataloader = self.train_dataloader()
+        # dataset = train_dataloader.dataset
+        # tokenizer = dataset.tokenizer
+        # with open(f"./samples/train.txt", "w") as f:
+        #     for index in range(len(dataset)):
+        #         data = dataset[index]
+        #         x, y, dfa = data
+        #         print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
 
 
 
@@ -388,12 +389,39 @@ class SequenceLightningModule(pl.LightningModule):
         dfa_accuracy = correct_chars / total_chars
         return dfa_accuracy
 
+    def _writes_to_file(self, prefix, x, y, batch, dfas):
+        inputs = batch[0].detach().cpu().numpy()
+        targets = y.detach().cpu().numpy()
+        preds = x.argmax(dim=-1).detach().cpu().numpy()
+        os.makedirs("generations", exist_ok=True)
+        with open(f"generations/{self.current_epoch}_{prefix}.txt", "a+") as handle:
+            for b in range(inputs.shape[0]):
+                pred_chars = [
+                    self.task.dataset.vocab.get_vocab(token) for token in preds[b] if token != -100
+                ]
+                pred = "".join(pred_chars)
+                gold_chars = [
+                    self.task.dataset.vocab.get_vocab(token) for token in targets[b] if token != -100
+                ]
+                gold = "".join(gold_chars)
+                input_chars = [
+                    self.task.dataset.vocab.get_vocab(token) for token in inputs[b] if token != -100
+                ]
+                input_chars = [char for char in input_chars if char != "."]
+                input = "".join(input_chars)
+                dfa = str(dfas[b])
+                print(f"{input}\t{gold}\t{pred}\t{dfa}", file=handle)
+
+
     def _shared_step(self, batch, batch_idx, prefix="train"):
         self._process_state(batch, batch_idx, train=(prefix == "train"))
         x, y, w = self.forward(batch)
 
         if "dfas" in w and prefix != "train":
             dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
+            # write to a file
+            self._writes_to_file(prefix, x, y, batch, w["dfas"])
+
         # Loss
         x = rearrange(x, "... C -> (...) C")
         y = rearrange(y, "... -> (...)")
@@ -402,7 +430,6 @@ class SequenceLightningModule(pl.LightningModule):
             loss = self.loss(x, y, **w)
         else:
             loss = self.loss_val(x, y, **w)
-
 
         # Metrics
         metrics = self.metrics(x, y, **w)

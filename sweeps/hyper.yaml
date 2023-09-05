@@ -14,7 +14,7 @@ parameters:
   optimizer.weight_decay:
     values: [0.01, 0.1, 0.001]
   experiment:
-    values: ["dfa/transformer", "dfa/h3", "dfa/s4d", "dfa/lstm"]
+    values: ["dfa/hyena", "dfa/lstm"]
 
 command:
   - ${env}

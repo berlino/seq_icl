@@ -53,9 +53,9 @@ def is_free(gpu_id):
 
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
-    config = get_config("sweeps/hyper.yaml")
-    sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/fixes/hyper"
+    config = get_config("sweeps/data_size.yaml")
+    sweeps = get_sweep(get_config("sweeps/data_size.yaml"))
+    sweep_folder = "hyper/fixes/hyperdatasize/"
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 128
 
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                         gpus[gpu_id] = sweep_hash
                         command = (
                             f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="fixes-hyper" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="fixes-hyper-datasize" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
                         )
                         print(command)
                         proc = Popen(
