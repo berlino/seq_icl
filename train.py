@@ -215,24 +215,24 @@ class SequenceLightningModule(pl.LightningModule):
         self.val_torchmetrics = self.task.val_torchmetrics
         self.test_torchmetrics = self.task.test_torchmetrics
 
-        # for name, dataloader in zip(*self._eval_dataloaders()):
-        #     dataset = dataloader.dataset
-        #     tokenizer = dataset.tokenizer
-        #     with open(f"./samples/{name}.txt", "w") as f:
-        #         for index in range(len(dataset)):
-        #             data = dataset[index]
-        #             x, y, dfa = data
-        #             print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
-        # train_dataloader = self.train_dataloader()
-        # dataset = train_dataloader.dataset
-        # tokenizer = dataset.tokenizer
-        # with open(f"./samples/train.txt", "w") as f:
-        #     for index in range(len(dataset)):
-        #         data = dataset[index]
-        #         x, y, dfa = data
-        #         print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+        os.makedirs("samples", exist_ok=True)
 
-
+        for name, dataloader in zip(*self._eval_dataloaders()):
+            dataset = dataloader.dataset
+            tokenizer = dataset.tokenizer
+            with open(f"samples/{name}.txt", "w") as f:
+                for index in range(len(dataset)):
+                    data = dataset[index]
+                    x, y, dfa = data
+                    print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+        train_dataloader = self.train_dataloader()
+        dataset = train_dataloader.dataset
+        tokenizer = dataset.tokenizer
+        with open(f"samples/train.txt", "w") as f:
+            for index in range(len(dataset)):
+                data = dataset[index]
+                x, y, dfa = data
+                print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
 
 
     def load_state_dict(self, state_dict, strict=True):
@@ -363,25 +363,27 @@ class SequenceLightningModule(pl.LightningModule):
 
     def _get_dfa_accuracy(self, x, y, batch, dfas):
         preds = x.argmax(dim=-1).detach().cpu().numpy()
-        golds = batch[0].detach().cpu().numpy()
+        inputs = batch[0].detach().cpu().numpy()
         total_chars = 0.0
         correct_chars = 0.0
         for b in range(preds.shape[0]):
             pred_chars = [
                 self.task.dataset.vocab.get_vocab(token) for token in preds[b]
             ]
-            gold_chars = [
+            input_chars = [
                 self.task.dataset.vocab.get_vocab(token)
-                for token in golds[b]
-                if token != -100
+                for token in inputs[b]
+                if token != -100 and self.task.dataset.vocab.get_vocab(token) != "."
             ]
             dfa = dfas[b]
             for t in range(preds.shape[1]):
-                if y[b][t].item() == -100:
-                    break
-                current_chars = gold_chars[:t+1] + [pred_chars[t]]
-                if pred_chars[t] == "|":
-                    continue
+                if len(input_chars) > t+1:
+                    if input_chars[t+1] == "|":
+                        continue
+                    if input_chars[t+1] == ".":
+                        break
+                current_chars = input_chars[:t+1] + [pred_chars[t]]
+                # take the last example
                 current_word = " ".join(current_chars).split(" | ")[-1]
                 if current_word:
                     correct_chars += int(dfa(current_word))
@@ -396,21 +398,36 @@ class SequenceLightningModule(pl.LightningModule):
         os.makedirs("generations", exist_ok=True)
         with open(f"generations/{self.current_epoch}_{prefix}.txt", "a+") as handle:
             for b in range(inputs.shape[0]):
-                pred_chars = [
-                    self.task.dataset.vocab.get_vocab(token) for token in preds[b] if token != -100
-                ]
+                pred_chars = []
+                target_chars = []
+                for t in range(len(targets[b])):
+                    pred_char = self.task.dataset.vocab.get_vocab(preds[b][t])
+                    if targets[b][t] == -100:
+                        if t + 1 < len(targets[b]):
+                            if targets[b][t+1] == -100:
+                                break
+                            else:
+                                target_char = "|"
+                                pred_char = "|"
+                        else:
+                            break
+                    else:
+                        target_char = self.task.dataset.vocab.get_vocab(targets[b][t])
+
+                    pred_chars.append(pred_char)
+                    target_chars.append(target_char)
+
+
                 pred = "".join(pred_chars)
-                gold_chars = [
-                    self.task.dataset.vocab.get_vocab(token) for token in targets[b] if token != -100
-                ]
-                gold = "".join(gold_chars)
+                target = "".join(target_chars)
+
                 input_chars = [
-                    self.task.dataset.vocab.get_vocab(token) for token in inputs[b] if token != -100
+                        self.task.dataset.vocab.get_vocab(token) for token in inputs[b] if token != -100
                 ]
                 input_chars = [char for char in input_chars if char != "."]
                 input = "".join(input_chars)
                 dfa = str(dfas[b])
-                print(f"{input}\t{gold}\t{pred}\t{dfa}", file=handle)
+                print(f"{input}\t{target}\t{pred}\t{dfa}", file=handle)
 
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
