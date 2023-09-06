@@ -372,21 +372,24 @@ class SequenceLightningModule(pl.LightningModule):
             ]
             input_chars = [
                 self.task.dataset.vocab.get_vocab(token)
-                for token in inputs[b]
-                if token != -100 and self.task.dataset.vocab.get_vocab(token) != "."
+                for token in inputs[b] if self.task.dataset.vocab.get_vocab(token) != "."
             ]
             dfa = dfas[b]
-            for t in range(preds.shape[1]):
+            for t in range(len(input_chars)):
                 if len(input_chars) > t+1:
                     if input_chars[t+1] == "|":
                         continue
                     if input_chars[t+1] == ".":
                         break
-                current_chars = input_chars[:t+1] + [pred_chars[t]]
-                # take the last example
-                current_word = " ".join(current_chars).split(" | ")[-1]
-                if current_word:
-                    correct_chars += int(dfa(current_word))
+                if len(pred_chars) > t:
+                    current_chars = input_chars[:t+1] + [pred_chars[t]]
+                    # take the last example
+                    current_word = " ".join(current_chars).split(" | ")[-1]
+                    if current_word:
+                        correct_chars += int(dfa(current_word))
+                        total_chars += 1
+                else:
+                    print("preds are shorter than inputs")
                     total_chars += 1
         dfa_accuracy = correct_chars / total_chars
         return dfa_accuracy
@@ -437,7 +440,8 @@ class SequenceLightningModule(pl.LightningModule):
         if "dfas" in w and prefix != "train":
             dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
-            self._writes_to_file(prefix, x, y, batch, w["dfas"])
+            if self.current_epoch % 50 == 0:
+                self._writes_to_file(prefix, x, y, batch, w["dfas"])
 
         # Loss
         x = rearrange(x, "... C -> (...) C")
