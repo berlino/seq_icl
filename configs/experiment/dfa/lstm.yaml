@@ -10,3 +10,4 @@ model:
   layer:
     _name_: lstm
     n_layer: 2
+    reinit: True
