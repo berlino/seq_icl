@@ -202,7 +202,7 @@ class SequenceLightningModule(pl.LightningModule):
         decoder = decoders.instantiate(
             decoder_cfg, model=self.model, dataset=self.dataset
         )
-
+        breakpoint()
         # Extract the modules so they show up in the top level parameter count
         self.encoder = U.PassthroughSequential(self.task.encoder, encoder)
         self.decoder = U.PassthroughSequential(decoder, self.task.decoder)

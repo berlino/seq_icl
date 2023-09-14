@@ -6,15 +6,17 @@ metric:
   goal: maximize
 parameters:
   model.d_model:
-    values: [128, 512]
+    values: [128, 256]
   model.n_layer:
     values: [4, 8, 2]
   optimizer.lr:
-    values: [0.00025, 0.0005, 0.0001, 0.001]
+    values: [0.00025, 0.0005, 0.0001]
   optimizer.weight_decay:
-    values: [0.01, 0.1, 0.001]
+    values: [0.01, 0.1]
+  dataset.num_examples:
+    values: [5000, 10000]
   experiment:
-    values: ["dfa/hyena", "dfa/lstm"]
+    values: ["dfa/rwkv"]
 
 command:
   - ${env}
