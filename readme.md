@@ -31,6 +31,19 @@ python -m train experiment=synthetics/induction_head/rwkv
 |---|:---:|:---:|:---:|:---:|:---:|:---:| :---:|:---:|
 | Test Accuracy | 97.2 | 8.8  | 100.0   | 6.2  | 4.8 | 4.8 | 6.0 | 5.0 |
 
+### Experiments on DFA
+
+To run the training,
+```bash
+python -m train experiment=dfa/lstm
+```
+
+
+To run the generation, 
+```bash
+python -m generate experiment=dfa/lstm train.ckpt="outputs/2023-09-18/08-23-56-668022/seq-icl-data/mbg9ohwc/checkpoints/epoch\=70-step\=11147.ckpt" hydra.run.dir="./"
+```
+Note to escape the `=` in the checkpoint path.
 
 ## Notes
 

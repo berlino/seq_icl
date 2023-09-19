@@ -754,7 +754,6 @@ def create_trainer(config, **kwargs):
         )
 
 
-
     # Lightning callbacks
     if "callbacks" in config:
         for _name_, callback in config.callbacks.items():
