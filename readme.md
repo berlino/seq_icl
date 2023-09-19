@@ -58,4 +58,4 @@ Note to escape the `=` in the checkpoint path.
 
 ### Acknowledgements
 
-This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main). Triton implementations are taken from 
+This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main). Triton implementations are taken from [linear rnn](https://github.com/sustcsonglin/pytorch_linear_rnn).
