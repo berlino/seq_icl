@@ -2,9 +2,10 @@ import copy
 import os
 import random
 import time
+import dataclasses
 from functools import partial, wraps
 from typing import Callable, List, Sequence
-
+import pickle
 import hydra
 import numpy as np
 import pytorch_lightning as pl
@@ -37,6 +38,13 @@ torch.backends.cudnn.allow_tf32 = True
 OmegaConf.register_new_resolver("eval", eval)
 OmegaConf.register_new_resolver("div_up", lambda x, y: (x + y - 1) // y)
 
+from analyze import get_dfa_probs
+from ngram import predict_with_n_gram_back_off, prob_distance, prob_distance_dfa
+
+@dataclasses.dataclass
+class Probs:
+    probs: np.ndarray
+    vocab: List
 
 # Lots of annoying hacks to get WandbLogger to continuously retry on failure
 class DummyExperiment:
@@ -157,7 +165,6 @@ class SequenceLightningModule(pl.LightningModule):
 
         self.setup()  ## Added by KS
 
-
     def setup(self, stage=None):
         if not self.hparams.train.disable_dataset:
             self.dataset.setup()
@@ -182,7 +189,6 @@ class SequenceLightningModule(pl.LightningModule):
         # Instantiate model
         self.model = utils.instantiate(registry.model, self.hparams.model)
 
-
         if (name := self.hparams.train.post_init_hook["_name_"]) is not None:
             kwargs = self.hparams.train.post_init_hook.copy()
             del kwargs["_name_"]
@@ -202,7 +208,6 @@ class SequenceLightningModule(pl.LightningModule):
         decoder = decoders.instantiate(
             decoder_cfg, model=self.model, dataset=self.dataset
         )
-        breakpoint()
         # Extract the modules so they show up in the top level parameter count
         self.encoder = U.PassthroughSequential(self.task.encoder, encoder)
         self.decoder = U.PassthroughSequential(decoder, self.task.decoder)
@@ -233,7 +238,6 @@ class SequenceLightningModule(pl.LightningModule):
                 data = dataset[index]
                 x, y, dfa = data
                 print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
-
 
     def load_state_dict(self, state_dict, strict=True):
         if self.hparams.train.pretrained_model_state_hook["_name_"] is not None:
@@ -372,17 +376,18 @@ class SequenceLightningModule(pl.LightningModule):
             ]
             input_chars = [
                 self.task.dataset.vocab.get_vocab(token)
-                for token in inputs[b] if self.task.dataset.vocab.get_vocab(token) != "."
+                for token in inputs[b]
+                if self.task.dataset.vocab.get_vocab(token) != "."
             ]
             dfa = dfas[b]
             for t in range(len(input_chars)):
-                if len(input_chars) > t+1:
-                    if input_chars[t+1] == "|":
+                if len(input_chars) > t + 1:
+                    if input_chars[t + 1] == "|":
                         continue
-                    if input_chars[t+1] == ".":
+                    if input_chars[t + 1] == ".":
                         break
                 if len(pred_chars) > t:
-                    current_chars = input_chars[:t+1] + [pred_chars[t]]
+                    current_chars = input_chars[: t + 1] + [pred_chars[t]]
                     # take the last example
                     current_word = " ".join(current_chars).split(" | ")[-1]
                     if current_word:
@@ -397,8 +402,24 @@ class SequenceLightningModule(pl.LightningModule):
     def _writes_to_file(self, prefix, x, y, batch, dfas):
         inputs = batch[0].detach().cpu().numpy()
         targets = y.detach().cpu().numpy()
-        preds = x.argmax(dim=-1).detach().cpu().numpy()
+        x = x.detach().cpu().numpy()
+        preds = x.argmax(axis=-1)
         os.makedirs("generations", exist_ok=True)
+        if os.path.isfile(f"generations/{self.current_epoch}_{prefix}.pkl"):
+            with open(f"generations/{self.current_epoch}_{prefix}.pkl", "rb") as handle:
+                saved_probs = pickle.load(handle)["probs"]
+                saved_probs = np.concatenate([saved_probs, x], axis=0)
+        else:
+            saved_probs = x
+
+        with open(f"generations/{self.current_epoch}_{prefix}.pkl", "wb") as handle:
+            pickle.dump(
+                {"probs": saved_probs, "vocab": self.task.dataset.vocab.vocab}, handle
+            )
+
+        total_diff_ngram = 0.0
+        total_diff_dfa = 0.0
+        total_diff_count = 0.0
         with open(f"generations/{self.current_epoch}_{prefix}.txt", "a+") as handle:
             for b in range(inputs.shape[0]):
                 pred_chars = []
@@ -407,7 +428,7 @@ class SequenceLightningModule(pl.LightningModule):
                     pred_char = self.task.dataset.vocab.get_vocab(preds[b][t])
                     if targets[b][t] == -100:
                         if t + 1 < len(targets[b]):
-                            if targets[b][t+1] == -100:
+                            if targets[b][t + 1] == -100:
                                 break
                             else:
                                 target_char = "|"
@@ -420,17 +441,31 @@ class SequenceLightningModule(pl.LightningModule):
                     pred_chars.append(pred_char)
                     target_chars.append(target_char)
 
-
                 pred = "".join(pred_chars)
                 target = "".join(target_chars)
 
                 input_chars = [
-                        self.task.dataset.vocab.get_vocab(token) for token in inputs[b] if token != -100
+                    self.task.dataset.vocab.get_vocab(token)
+                    for token in inputs[b]
+                    if token != -100
                 ]
                 input_chars = [char for char in input_chars if char != "."]
                 input = "".join(input_chars)
                 dfa = str(dfas[b])
-                print(f"{input}\t{target}\t{pred}\t{dfa}", file=handle)
+
+                model_probs = Probs(x[b], self.task.dataset.vocab.vocab)
+
+                n_gram_preds, n_gram_probs = predict_with_n_gram_back_off(input, N=3)
+                dfa_probs, dfa_vocab = get_dfa_probs(input, dfas[b])
+                diff_n_gram = prob_distance(model_probs, n_gram_probs, input)
+                diff_dfa = prob_distance_dfa(model_probs, dfa_probs, dfa_vocab, input)
+                total_diff_ngram += diff_n_gram
+                total_diff_dfa += diff_dfa
+                total_diff_count += 1
+
+                print(f"{input}\t{target}\t{pred}\t{dfa}\t{diff_n_gram}\t{diff_dfa}", file=handle)
+
+        return total_diff_ngram / total_diff_count, total_diff_dfa / total_diff_count
 
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
@@ -440,8 +475,8 @@ class SequenceLightningModule(pl.LightningModule):
         if "dfas" in w and prefix != "train":
             dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
-            if self.current_epoch % 50 == 0:
-                self._writes_to_file(prefix, x, y, batch, w["dfas"])
+            if self.current_epoch % 50 == 1:
+                n_gram_diff, dfa_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])
 
         # Loss
         x = rearrange(x, "... C -> (...) C")
@@ -457,6 +492,9 @@ class SequenceLightningModule(pl.LightningModule):
         metrics["loss"] = loss
         if prefix != "train":
             metrics["dfa_accuracy"] = dfa_accuracy
+            if self.current_epoch % 50 == 1:
+                metrics["n_gram_diff"] = n_gram_diff
+                metrics["dfa_diff"] = dfa_diff
         metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
 
         # Calculate torchmetrics
@@ -753,8 +791,6 @@ def create_trainer(config, **kwargs):
             **config.wandb,
         )
 
-
-
     # Lightning callbacks
     if "callbacks" in config:
         for _name_, callback in config.callbacks.items():
@@ -822,7 +858,6 @@ def main(config: OmegaConf):
     # Pretty print config using Rich library
     utils.train.print_config(config, resolve=True)
     train(config)
-
 
 
 if __name__ == "__main__":

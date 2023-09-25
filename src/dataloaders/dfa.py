@@ -40,6 +40,15 @@ class DFA:
                 current_node = self.transitions[current_node][symbol]
         return True
 
+    def forward(self, word: str):
+        current_node = 0
+        for symbol in word.split():
+            if symbol not in self.transitions[current_node]:
+                return None
+            else:
+                current_node = self.transitions[current_node][symbol]
+        return current_node
+
     def trace(self, word: str):
         current_node = 0
         path = [current_node]
