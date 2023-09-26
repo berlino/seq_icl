@@ -40,6 +40,15 @@ class DFA:
                 current_node = self.transitions[current_node][symbol]
         return True
 
+    def forward(self, word: str):
+        current_node = 0
+        for symbol in word.split():
+            if symbol not in self.transitions[current_node]:
+                return None
+            else:
+                current_node = self.transitions[current_node][symbol]
+        return current_node
+
     def trace(self, word: str):
         current_node = 0
         path = [current_node]
@@ -92,7 +101,9 @@ class RandomDFASampler:
             transition_symbols = self.rng.choice(
                 self.alphabet, size=num_transitions, replace=False
             )
-            transition_nodes = self.rng.integers(self.num_nodes, size=num_transitions)
+            # exclude self loops
+            possible_nodes = [n for n in range(self.num_nodes) if n != node]
+            transition_nodes = self.rng.choice(possible_nodes, size=num_transitions, replace=False)
             transitions[node] = dict(zip(transition_symbols, transition_nodes))
         dfa_rng = np.random.default_rng(self.rng.integers(0, 2**32))
         return DFA(self.num_nodes, self.alphabet, tuple(transitions), dfa_rng)
@@ -255,7 +266,7 @@ class ICLDFADataModule(SequenceDataset):
 
         DFAs = set([])
         for _ in range(self.num_examples * 10):
-            num_nodes = self.rng.integers(2, self.max_num_nodes + 1)
+            num_nodes = self.rng.integers(self.max_outgoing_edges, self.max_num_nodes + 1)
             num_alphabet = self.rng.integers(
                 self.max_outgoing_edges, self.vocab_size - 2 + 1
             )

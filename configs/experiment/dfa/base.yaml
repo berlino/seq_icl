@@ -7,7 +7,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 120
+  max_epochs: 200
 
 dataset:
   batch_size: 32
