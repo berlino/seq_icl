@@ -188,7 +188,7 @@ def prob_distance_dfa_ngram(n_gram_probs, dfa_probs, dfa_alphabet, inputs):
         if inputs[t] != "|":
             probs = dfa_probs[t] / np.sum(dfa_probs[t])
             n_gram_prob, current_vocab = n_gram_probs[t-1]
-            n_gram_full_prob = prob.copy()
+            n_gram_full_prob = probs.copy()
             for i, char in enumerate(dfa_alphabet):
                 if char not in current_vocab:
                     n_gram_full_prob[i] = 0.0
@@ -196,7 +196,7 @@ def prob_distance_dfa_ngram(n_gram_probs, dfa_probs, dfa_alphabet, inputs):
                     n_gram_full_prob[i] = n_gram_prob[current_vocab.index(char)]
 
             n_gram_full_prob = n_gram_full_prob / np.sum(n_gram_full_prob)
-            diff += l1_distance(probs, n_gram_full_prob )
+            diff += l1_distance(probs, n_gram_full_prob)
             total += 1
 
     return diff / total
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     from tqdm import tqdm
 
     # exp_folder_tf = "outputs/2023-09-06/02-42-23-025200/generations" # TF
-    exp_folder_tf = "outputs/2023-09-19/11-35-58-479138/generations"
+    exp_folder_tf = "outputs/2023-09-24/23-11-21-453058/generations"
     # exp_folder_lstm = "outputs/2023-09-07/02-22-14-205796/generations" # LSTM
     exp_folder_lstm = "outputs/2023-09-19/11-05-57-447748/generations"
     exp_folder_hyena = "outputs/2023-09-20/03-41-51-035199/generations"
@@ -223,16 +223,16 @@ if __name__ == "__main__":
     total_diff = 0.0
     total_dfa_diff = 0.0
 
-    for index, example in tqdm(lstm_results[-2].iterrows(), disable=True):
+    for index, example in tqdm(tf_results[-2].iterrows(), disable=True):
         model_pred = example["pred"]
         model_probs = example["probs"]
         dfa_probs, dfa_vocab = get_dfa_probs(example["input"], example["dfa"])
         example = example[["input", "target", "pred", "dfa"]].copy()
         example["pred"], n_gram_probs = predict_with_n_gram_back_off(example["input"], N=3)
-        print("======ngram pred======")
-        print(example["pred"])
-        print("======model pred======")
-        print(model_pred)
+        # print("======ngram pred======")
+        # print(example["pred"])
+        # print("======model pred======")
+        # print(model_pred)
         # print("======LSTM pred======")
         # print(lstm_results[-2].iloc[index]["pred"])
         # print("======Hyena pred======")
@@ -251,7 +251,7 @@ if __name__ == "__main__":
         transitions, correct, length = get_transition_info(example)
         corrects += correct
         total += length
-        # print("running acc: ", corrects / total)
+        print("running n gram acc: ", corrects / total)
         # print("running diff (ngram, model)", total_diff / total)
         # print("running diff (dfa, model)", total_dfa_diff / total)
 

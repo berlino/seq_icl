@@ -94,7 +94,7 @@ def get_results(exp_folder):
         basename = os.path.basename(file)
         basename = basename.replace("_test.txt", "")
         fileid = int(basename)
-        df = pd.read_csv(file, sep="\t", header=None, names=["input", "target", "pred", "dfa"])
+        df = pd.read_csv(file, sep="\t", header=None, names=["input", "target", "pred", "dfa", "diff_n_gram", "diff_dfa", "diff_dfa_ngram"])
         df["dfa"] = df["dfa"].apply(lambda x: eval_dfa(x))
         pkl_file = file.replace("txt", "pkl")
         probs = None

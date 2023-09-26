@@ -39,7 +39,7 @@ OmegaConf.register_new_resolver("eval", eval)
 OmegaConf.register_new_resolver("div_up", lambda x, y: (x + y - 1) // y)
 
 from analyze import get_dfa_probs
-from ngram import predict_with_n_gram_back_off, prob_distance, prob_distance_dfa
+from ngram import predict_with_n_gram_back_off, prob_distance, prob_distance_dfa, prob_distance_dfa_ngram
 
 @dataclasses.dataclass
 class Probs:
@@ -419,6 +419,7 @@ class SequenceLightningModule(pl.LightningModule):
 
         total_diff_ngram = 0.0
         total_diff_dfa = 0.0
+        total_diff_dfa_ngram = 0.0
         total_diff_count = 0.0
         with open(f"generations/{self.current_epoch}_{prefix}.txt", "a+") as handle:
             for b in range(inputs.shape[0]):
@@ -459,13 +460,15 @@ class SequenceLightningModule(pl.LightningModule):
                 dfa_probs, dfa_vocab = get_dfa_probs(input, dfas[b])
                 diff_n_gram = prob_distance(model_probs, n_gram_probs, input)
                 diff_dfa = prob_distance_dfa(model_probs, dfa_probs, dfa_vocab, input)
+                diff_dfa_ngram = prob_distance_dfa_ngram(n_gram_probs, dfa_probs, dfa_vocab, input)
                 total_diff_ngram += diff_n_gram
                 total_diff_dfa += diff_dfa
+                total_diff_dfa_ngram += diff_dfa_ngram
                 total_diff_count += 1
 
-                print(f"{input}\t{target}\t{pred}\t{dfa}\t{diff_n_gram}\t{diff_dfa}", file=handle)
+                print(f"{input}\t{target}\t{pred}\t{dfa}\t{diff_n_gram}\t{diff_dfa}\t{diff_dfa_ngram}", file=handle)
 
-        return total_diff_ngram / total_diff_count, total_diff_dfa / total_diff_count
+        return total_diff_ngram / total_diff_count, total_diff_dfa / total_diff_count, total_diff_dfa_ngram / total_diff_count
 
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
@@ -476,7 +479,7 @@ class SequenceLightningModule(pl.LightningModule):
             dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
             if self.current_epoch % 50 == 1:
-                n_gram_diff, dfa_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])
+                n_gram_diff, dfa_diff, dfa_ngram_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])
 
         # Loss
         x = rearrange(x, "... C -> (...) C")
@@ -495,6 +498,7 @@ class SequenceLightningModule(pl.LightningModule):
             if self.current_epoch % 50 == 1:
                 metrics["n_gram_diff"] = n_gram_diff
                 metrics["dfa_diff"] = dfa_diff
+                metrics["dfa_ngram_diff"] = dfa_ngram_diff
         metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
 
         # Calculate torchmetrics

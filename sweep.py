@@ -53,13 +53,13 @@ def is_free(gpu_id):
 
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
-    config = get_config("sweeps/hyper_lstm.yaml")
-    sweeps = get_sweep(get_config("sweeps/hyper_lstm.yaml"))
-    sweep_folder = "hyper/dfadiff/"
+    config = get_config("sweeps/hyper.yaml")
+    sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
+    sweep_folder = "hyper/dfadiff2/"
     os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 129 + 29
+    hash_offset = 129 + 199
 
-    gpus = {id: None for id in [13, 14, 15]}
+    gpus = {id: None for id in [3, 5, 6, 7, 8, 10, 14]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -75,8 +75,8 @@ if __name__ == "__main__":
                         sweep_hash = hash(sweep) + hash_offset
                         gpus[gpu_id] = sweep_hash
                         command = (
-                            f"export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="dfa-diff" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            f"export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="dfa-diff-v2" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
                         )
                         print(command)
                         proc = Popen(

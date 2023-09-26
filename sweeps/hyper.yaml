@@ -8,7 +8,7 @@ parameters:
   model.d_model:
     values: [128, 256]
   model.n_layer:
-    values: [8, 2]
+    values: [8, 4, 2]
   optimizer.lr:
     values: [0.00025, 0.0001]
   optimizer.weight_decay:
