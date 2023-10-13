@@ -33,13 +33,14 @@ class SelfAttention(nn.Module):
         attention_dropout: The dropout rate to apply to the attention
                            (default: 0.0)
     """
-    def __init__(self, causal=False, softmax_scale=None, attention_dropout=0.0):
+    def __init__(self, causal=False, softmax_scale=None, attention_dropout=0.0, linear_attention=False):
         super().__init__()
         self.causal = causal
         self.softmax_scale = softmax_scale
         self.dropout_p = attention_dropout
+        self.linear_attention = linear_attention
 
-    def forward(self, qkv, causal=None, key_padding_mask=None):
+    def forward(self, qkv, causal=None, key_padding_mask=None, return_attention=False):
         """Implements the multihead softmax attention.
         Arguments
         ---------
@@ -65,7 +66,10 @@ class SelfAttention(nn.Module):
             causal_mask = torch.triu(torch.full((seqlen, seqlen), -10000.0, device=scores.device), 1)
             # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
             scores = scores + causal_mask.to(dtype=scores.dtype)
-        attention = torch.softmax(scores, dim=-1, dtype=v.dtype)
+        if self.linear_attention:
+            attention = scores
+        else:
+            attention = torch.softmax(scores, dim=-1, dtype=v.dtype)
         attention_drop = F.dropout(attention, self.dropout_p if self.training else 0.0)
         output = torch.einsum('bhts,bshd->bthd', attention_drop, v)
         return output
@@ -75,6 +79,7 @@ class MHA(nn.Module):
     """
 
     def __init__(self, embed_dim, num_heads, bias=True, dropout=0.0,
+                 linear_attention=False,
                  softmax_scale=None, causal=False, layer_idx=None, dwconv=False,return_residual=False,device=None, dtype=None) -> None:
         """
             return_residual: whether to return the input x along with the output. This is for
@@ -88,6 +93,9 @@ class MHA(nn.Module):
         self.layer_idx = layer_idx
         self.dwconv = dwconv
         self.return_residual = return_residual
+        self.linear_attention = linear_attention
+        if self.linear_attention:
+            print("Using linear attention")
 
         self.num_heads = num_heads
         assert self.embed_dim % num_heads == 0, "self.kdim must be divisible by num_heads"
@@ -105,13 +113,13 @@ class MHA(nn.Module):
             self.dwconv_qkv = nn.Conv1d(3 * embed_dim, 3 * embed_dim, kernel_size=3, padding=2,
                                         groups=3 * embed_dim)
 
-        self.inner_attn = inner_attn_cls(causal=causal, softmax_scale=softmax_scale,
+        self.inner_attn = inner_attn_cls(causal=causal, softmax_scale=softmax_scale, linear_attention=linear_attention,
                                          attention_dropout=dropout)
 
         # output projection always have the bias (for now)
         self.out_proj = linear_cls(embed_dim, embed_dim, **factory_kwargs)
 
-    def forward(self, x, key_padding_mask=None, **kwargs):
+    def forward(self, x, key_padding_mask=None, return_attention=False, **kwargs):
         """
         Arguments:
             x: (batch, seqlen, hidden_dim) (where hidden_dim = num heads * head dim) if
@@ -141,11 +149,10 @@ class MHA(nn.Module):
                             'b d s -> b s d').contiguous()
         qkv = rearrange(qkv, '... (three h d) -> ... three h d', three=3, d=self.head_dim)
 
-        context = self.inner_attn(qkv, **kwargs)
+        context = self.inner_attn(qkv, return_attention=return_attention, **kwargs)
 
         out = self.out_proj(rearrange(context, '... h d -> ... (h d)'))
         return out if not self.return_residual else (out, x)
-
 
 class GPT2Embeddings(nn.Module):
 
@@ -254,7 +261,7 @@ class Block(nn.Module):
             self.norm2 = norm_cls(dim)
 
     def forward(self, hidden_states, residual = None,
-                mixer_subset=None, mixer_kwargs=None):
+                mixer_subset=None, mixer_kwargs=None, return_attention=False):
         r"""Pass the input through the encoder layer.
         Args:
             hidden_states: the sequence to the encoder layer (required).
@@ -307,7 +314,7 @@ class Block(nn.Module):
             return hidden_states
 
 def create_mixer_cls(layer=None,
-                     attn_layer_idx=None, attn_cfg=None, layer_idx=None,
+                     attn_layer_idx=None, attn_cfg=None, layer_idx=None, linear_attention=False,
                      device=None, dtype=None):
     factory_kwargs = {'device': device, 'dtype': dtype}
     if attn_layer_idx is not None and layer_idx in attn_layer_idx:
@@ -315,7 +322,7 @@ def create_mixer_cls(layer=None,
 
         mha_cls = MHA
 
-        mixer_cls = partial(mha_cls, causal=causal, layer_idx=layer_idx,
+        mixer_cls = partial(mha_cls, causal=causal, layer_idx=layer_idx, linear_attention=linear_attention,
                             **(attn_cfg if attn_cfg is not None else {}),**factory_kwargs)
     else:
         mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=layer_idx, **factory_kwargs)
@@ -336,10 +343,11 @@ def create_block(d_model, d_inner=None,
                  layer=None, attn_layer_idx=None,
                  attn_cfg=None, layer_norm_epsilon=1e-5,
                  resid_dropout1=0.0, resid_dropout2=0.0, residual_in_fp32=False,
-                 layer_idx=None,
+                 layer_idx=None, linear_attention=False,
                  device=None, dtype=None):
     factory_kwargs = {'device': device, 'dtype': dtype}
     mixer_cls = create_mixer_cls(layer=layer,
+                                 linear_attention=linear_attention,
                                  attn_layer_idx=attn_layer_idx,
                                  attn_cfg=attn_cfg, layer_idx=layer_idx,
                                  **factory_kwargs)
@@ -392,7 +400,7 @@ class LMBackbone(nn.Module):
                  attn_layer_idx=None, attn_cfg=None, max_position_embeddings=0,
                  resid_dropout: float = 0.0, embed_dropout: float = 0.1,
                  layer_norm_epsilon: float = 1e-5, initializer_cfg=None,residual_in_fp32=False,
-                 device=None, dtype=None, **kwargs) -> None:
+                 device=None, dtype=None, linear_attention=False, **kwargs) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
         self.process_group = process_group
@@ -407,6 +415,7 @@ class LMBackbone(nn.Module):
             attn_cfg=attn_cfg, layer_norm_epsilon=layer_norm_epsilon,
             resid_dropout1=embed_dropout if i == 0 else resid_dropout,
             resid_dropout2=resid_dropout, residual_in_fp32=residual_in_fp32,layer_idx=i,
+            linear_attention=linear_attention,
             **factory_kwargs,
         ) for i in range(n_layer)])
 
@@ -416,16 +425,22 @@ class LMBackbone(nn.Module):
         self.apply(partial(_init_weights, n_layer=n_layer,
                            **(initializer_cfg if initializer_cfg is not None else {})))
 
-    def forward(self, input_ids, position_ids=None):
+    def forward(self, input_ids, position_ids=None, return_hidden_outputs=False):
         hidden_states = self.embeddings(input_ids, position_ids=position_ids,)
         residual = None
-
+        if return_hidden_outputs:
+            hidden_outputs = [hidden_states.detach().cpu()]
+        else:
+            hidden_outputs = None
         for layer in self.layers:
             hidden_states, residual = layer(hidden_states, residual)
+            if return_hidden_outputs:
+                hidden_outputs.append(hidden_states.detach().cpu())
 
         dropped = self.drop_f(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped
         hidden_states = self.ln_f(residual.to(dtype=self.ln_f.weight.dtype))
+        hidden_states = {"hidden_states": hidden_states, "hidden_outputs": hidden_outputs}
 
         return hidden_states
 
@@ -437,6 +452,7 @@ class SimpleLMHeadModel(nn.Module):
                  resid_dropout: float = 0.0, embed_dropout: float = 0.1,
                  layer_norm_epsilon: float = 1e-5, initializer_cfg=None,residual_in_fp32=False,
                  pad_vocab_size_multiple: int = 1,
+                 linear_attention=False,
                  device=None, dtype=None, **kwargs) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
@@ -448,6 +464,7 @@ class SimpleLMHeadModel(nn.Module):
             max_position_embeddings=max_position_embeddings,
             resid_dropout=resid_dropout, embed_dropout=embed_dropout,
             layer_norm_epsilon=layer_norm_epsilon,
+            linear_attention=linear_attention,
             initializer_cfg=initializer_cfg, residual_in_fp32=residual_in_fp32,
             **factory_kwargs, **kwargs
         )
@@ -461,16 +478,17 @@ class SimpleLMHeadModel(nn.Module):
     def tie_weights(self):
         self.lm_head.weight = self.backbone.embeddings.word_embeddings.weight
 
-    def forward(self, input_ids, position_ids=None, state=None): # state for the repo interface
-        hidden_states = self.backbone(input_ids, position_ids=position_ids)
+    def forward(self, input_ids, position_ids=None, state=None, return_hidden_outputs=False): # state for the repo interface
+        hidden_states = self.backbone(input_ids, position_ids=position_ids, return_hidden_outputs=return_hidden_outputs)
+        hidden_states, hidden_outputs = hidden_states["hidden_states"], hidden_states["hidden_outputs"]
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
-        return CausalLMOutput(logits=lm_logits), None
+        return CausalLMOutput(logits=lm_logits), hidden_outputs, None
 
 
 class SimpleLMHeadModelNoFFN(nn.Module):
     """
-    Same as SimpleLMHeadModel but without the MLP in the Transformer block, suitable for LSTM. 
+    Same as HeadModel but without the MLP in the Transformer block, suitable for LSTM.
     """
 
     def __init__(self, d_model: int, vocab_size: int,
@@ -492,7 +510,7 @@ class SimpleLMHeadModelNoFFN(nn.Module):
 
         mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=None, **factory_kwargs)
         self.mixer = mixer_cls(d_model)
-        
+
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
         self.tie_weights()
 

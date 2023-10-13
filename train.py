@@ -39,12 +39,19 @@ OmegaConf.register_new_resolver("eval", eval)
 OmegaConf.register_new_resolver("div_up", lambda x, y: (x + y - 1) // y)
 
 from analyze import get_dfa_probs
-from ngram import predict_with_n_gram_back_off, prob_distance, prob_distance_dfa, prob_distance_dfa_ngram
+from ngram import (
+    predict_with_n_gram_back_off,
+    prob_distance,
+    prob_distance_dfa,
+    prob_distance_dfa_ngram,
+)
+
 
 @dataclasses.dataclass
 class Probs:
     probs: np.ndarray
     vocab: List
+
 
 # Lots of annoying hacks to get WandbLogger to continuously retry on failure
 class DummyExperiment:
@@ -348,9 +355,14 @@ class SequenceLightningModule(pl.LightningModule):
     #     x, w = self.decoder(x, state=state, **z)
     #     return x, y, w
 
-    def forward(self, batch):
+    def forward(self, batch, return_hidden_outputs=False):
         return self.task.forward(
-            batch, self.encoder, self.model, self.decoder, self._state
+            batch,
+            self.encoder,
+            self.model,
+            self.decoder,
+            self._state,
+            return_hidden_outputs=return_hidden_outputs,
         )
 
     def step(self, x_t):
@@ -399,28 +411,43 @@ class SequenceLightningModule(pl.LightningModule):
         dfa_accuracy = correct_chars / total_chars
         return dfa_accuracy
 
-    def _writes_to_file(self, prefix, x, y, batch, dfas):
+    def _writes_to_file(self, prefix, x, y, batch, dfas, ngram=3, hidden_outputs=None):
         inputs = batch[0].detach().cpu().numpy()
         targets = y.detach().cpu().numpy()
         x = x.detach().cpu().numpy()
         preds = x.argmax(axis=-1)
         os.makedirs("generations", exist_ok=True)
-        if os.path.isfile(f"generations/{self.current_epoch}_{prefix}.pkl"):
-            with open(f"generations/{self.current_epoch}_{prefix}.pkl", "rb") as handle:
-                saved_probs = pickle.load(handle)["probs"]
-                saved_probs = np.concatenate([saved_probs, x], axis=0)
-        else:
-            saved_probs = x
+        os.makedirs(f"generations/{self.current_epoch}_{prefix}_batch", exist_ok=True)
+        for i in range(200):
 
-        with open(f"generations/{self.current_epoch}_{prefix}.pkl", "wb") as handle:
-            pickle.dump(
-                {"probs": saved_probs, "vocab": self.task.dataset.vocab.vocab}, handle
-            )
+            path = f"generations/{self.current_epoch}_{prefix}_batch/{i}.pkl"
 
-        total_diff_ngram = 0.0
-        total_diff_dfa = 0.0
-        total_diff_dfa_ngram = 0.0
-        total_diff_count = 0.0
+            if not os.path.isfile(path):
+                if hidden_outputs is not None:
+                    saved_hidden_outputs = [
+                        hidden_output.numpy() for hidden_output in hidden_outputs
+                    ]
+                else:
+                    saved_hidden_outputs = None
+                with open(path, "wb") as handle:
+                    pickle.dump(
+                        {
+                            "probs": x,
+                            "vocab": self.task.dataset.vocab.vocab,
+                            "hidden_outputs": saved_hidden_outputs,
+                        },
+                        handle,
+                    )
+                break
+
+        total_l1_chars = 0.0
+        total_l1_model_dfa = 0.0
+        total_l1_model_ngram = 0.0
+        total_l1_dfa_ngram = 0.0
+        total_n_gram_chars = 0.0
+        total_n_gram_loss = 0.0
+        total_n_gram_corrects = 0.0
+
         with open(f"generations/{self.current_epoch}_{prefix}.txt", "a+") as handle:
             for b in range(inputs.shape[0]):
                 pred_chars = []
@@ -454,32 +481,67 @@ class SequenceLightningModule(pl.LightningModule):
                 input = "".join(input_chars)
                 dfa = str(dfas[b])
 
-                model_probs = Probs(x[b], self.task.dataset.vocab.vocab)
+                model_probs = torch.softmax(torch.tensor(x[b]), dim=-1).detach().cpu().numpy()
+                dfa_probs = get_dfa_probs(input, dfas[b], vocab=self.task.dataset.vocab)
+                model_probs = model_probs[:len(dfa_probs)]
+                total_l1_model_dfa += abs(model_probs - dfa_probs).sum()
+                total_l1_chars += dfa_probs.shape[0]
+                if ngram != -1:
+                    n_gram_probs = predict_with_n_gram_back_off(input, N=ngram, global_vocab=self.task.dataset.vocab)
+                    total_l1_model_ngram += abs(model_probs - n_gram_probs).sum()
+                    total_l1_dfa_ngram += abs(dfa_probs - n_gram_probs).sum()
 
-                n_gram_preds, n_gram_probs = predict_with_n_gram_back_off(input, N=3)
-                dfa_probs, dfa_vocab = get_dfa_probs(input, dfas[b])
-                diff_n_gram = prob_distance(model_probs, n_gram_probs, input)
-                diff_dfa = prob_distance_dfa(model_probs, dfa_probs, dfa_vocab, input)
-                diff_dfa_ngram = prob_distance_dfa_ngram(n_gram_probs, dfa_probs, dfa_vocab, input)
-                total_diff_ngram += diff_n_gram
-                total_diff_dfa += diff_dfa
-                total_diff_dfa_ngram += diff_dfa_ngram
-                total_diff_count += 1
+                    for t in range(len(targets[b])):
+                        if targets[b][t] == -100:
+                            if t + 1 < len(targets[b]):
+                                if targets[b][t + 1] == -100:
+                                    break
+                                else:
+                                    continue
+                            else:
+                                break
+                        else:
+                            total_n_gram_loss -= np.log(n_gram_probs[t][targets[b][t]] + 1e-5)
+                            total_n_gram_chars += 1
+                            if dfa_probs[t, n_gram_probs[t].argmax()] != 0.0:
+                                total_n_gram_corrects += 1
 
-                print(f"{input}\t{target}\t{pred}\t{dfa}\t{diff_n_gram}\t{diff_dfa}\t{diff_dfa_ngram}", file=handle)
 
-        return total_diff_ngram / total_diff_count, total_diff_dfa / total_diff_count, total_diff_dfa_ngram / total_diff_count
+                print(
+                    f"{input}\t{target}\t{pred}\t{dfa}",
+                    file=handle,
+                )
 
+        return (
+            total_l1_model_ngram / total_l1_chars,
+            total_l1_model_dfa / total_l1_chars,
+            total_l1_dfa_ngram / total_l1_chars,
+            total_n_gram_loss / total_n_gram_chars,
+            total_n_gram_corrects / total_n_gram_chars,
+
+        )
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
-        self._process_state(batch, batch_idx, train=(prefix == "train"))
-        x, y, w = self.forward(batch)
+        if self.current_epoch == 199:
+            return_hidden_outputs = True
+        else:
+            return_hidden_outputs = False
 
-        if "dfas" in w and prefix != "train":
+        self._process_state(batch, batch_idx, train=(prefix == "train"))
+        x, y, w = self.forward(batch, return_hidden_outputs=return_hidden_outputs)
+
+        if "dfas" in w:
             dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
-            if self.current_epoch % 50 == 1:
-                n_gram_diff, dfa_diff, dfa_ngram_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])
+            hidden_outputs = w["hidden_outputs"] if return_hidden_outputs else None
+            if self.current_epoch % 50 == 0 or return_hidden_outputs:
+                model_ngram_diff, model_dfa_diff, dfa_ngram_diff, n_gram_loss, n_gram_dfa_acc = self._writes_to_file(
+                    prefix, x, y, batch, w["dfas"],
+                    ngram=3,
+                    hidden_outputs=hidden_outputs
+                )
+            # elif self.current_epoch % 50 == 1:
+            #     n_gram_diff, dfa_diff, dfa_ngram_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])
 
         # Loss
         x = rearrange(x, "... C -> (...) C")
@@ -495,10 +557,13 @@ class SequenceLightningModule(pl.LightningModule):
         metrics["loss"] = loss
         if prefix != "train":
             metrics["dfa_accuracy"] = dfa_accuracy
-            if self.current_epoch % 50 == 1:
-                metrics["n_gram_diff"] = n_gram_diff
-                metrics["dfa_diff"] = dfa_diff
+            if self.current_epoch % 50 == 0 or return_hidden_outputs:
+                metrics["model_ngram_diff"] = model_ngram_diff
+                metrics["model_dfa_diff"] = model_dfa_diff
                 metrics["dfa_ngram_diff"] = dfa_ngram_diff
+                metrics["n_gram_loss"] = n_gram_loss
+                metrics["n_gram_dfa_acc"] = n_gram_dfa_acc
+
         metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
 
         # Calculate torchmetrics

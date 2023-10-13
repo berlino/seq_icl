@@ -13,12 +13,6 @@ def eval_dfa(dfa_str):
     dfa_str = dfa_str[:rng_idx] + ", rng=np.random.default_rng(0))"
     return eval(dfa_str)
 
-def get_uniform_probs(chars, sym2id):
-    probs = np.zeros(len(sym2id))
-    for c in chars:
-        probs[sym2id[c]] = 1 / len(chars)
-    return probs
-
 def get_transition_info(row):
     input, target, pred, dfa = row[["input", "target", "pred", "dfa"]]
     preds = pred.split("|")
@@ -40,21 +34,23 @@ def get_transition_info(row):
     total = np.sum(list(map(int, list(transition_states.replace("|", "")))))
     return transition_states, total, len(transition_states.replace("|", ""))
 
-def get_dfa_probs(input, dfa):
-    transition_probs = []
-    vocab = list(dfa.alphabet)
-    sym2id = {sym: i for i, sym in enumerate(vocab)}
+def get_uniform_probs(chars, vocab):
+    probs = np.zeros(len(vocab))
+    for c in chars:
+        probs[vocab.get_id(c)] = 1 / len(chars)
+    return probs
+
+def get_dfa_probs(input, dfa, vocab):
+    probs = []
     for index, example in enumerate(input.split("|")):
-        for t in range(len(example)):
+        for t in range(0, len(example)+1):
+            if t == 0 and index == 0:
+                continue
             current_word = " ".join(list(example[:t]))
             node = dfa.forward(current_word)
-            if node is not None:
-                possibilities = list(dfa.transitions[node].keys())
-                transition_probs.append(get_uniform_probs(possibilities, sym2id))
-            else:
-                raise ValueError("Node is None")
-        transition_probs.append(None)
-    return transition_probs[:-1], vocab
+            possibilities = list(dfa.transitions[node].keys())
+            probs.append(get_uniform_probs(possibilities,  vocab))
+    return np.array(probs)
 
 def get_traces(row):
     input, target, pred, dfa = row[["input", "target", "pred", "dfa"]]

@@ -181,7 +181,7 @@ class LMTask(BaseTask):
         return x, y, w
 
 class DFALMTask(LMTask):
-    def forward(self, batch, encoder, model, decoder, _state):
+    def forward(self, batch, encoder, model, decoder, _state, return_hidden_outputs=False):
         """Passes a batch through the encoder, backbone, and decoder"""
         # z holds arguments such as sequence length
         x, y, *z = batch # z holds extra dataloader info such as resolution
@@ -193,7 +193,7 @@ class DFALMTask(LMTask):
             z = z[0]
 
         x, w = encoder(x) # w can model-specific constructions such as key_padding_mask for transformers or state for RNNs
-        x, state = model(x, **w, state=_state)
+        x, hidden_outputs, state = model(x, **w, state=_state, return_hidden_outputs=return_hidden_outputs)
         self._state = state
         x, w = decoder(x, state=state)
 
@@ -201,6 +201,7 @@ class DFALMTask(LMTask):
         # x = rearrange(x, '... C -> (...) C')
         # y = rearrange(y, '... -> (...)')
         w["dfas"] = z
+        w["hidden_outputs"] = hidden_outputs
         return x, y, w
 
 

@@ -89,9 +89,11 @@ class SequenceModel(SequenceModule):
         outputs = inputs
         prev_states = [None] * len(self.layers) if state is None else state
         next_states = []
+        hidden_outputs = [outputs]
         for layer, prev_state in zip(self.layers, prev_states):
             outputs, state = layer(outputs, *args, state=prev_state, **kwargs)
             next_states.append(state)
+            hidden_outputs.append(outputs)
             if self.track_norms: output_norms.append(torch.mean(outputs.detach() ** 2))
         if self.norm is not None: outputs = self.norm(outputs)
 
@@ -100,7 +102,7 @@ class SequenceModel(SequenceModule):
         if self.track_norms:
             metrics = to_dict(output_norms, recursive=False)
             self.metrics = {f'norm/{i}': v for i, v in metrics.items()}
-
+        outputs = {"outputs": outputs, "hidden_outputs": hidden_outputs}
         return outputs, next_states
 
     @property

@@ -109,12 +109,12 @@ def get_next_char_prob(
     return next_probs
 
 
-def predict_with_n_gram_back_off(inputs: str, N: int = 3) -> str:
+def predict_with_n_gram_back_off(inputs: str, N: int = 3, global_vocab=None) -> str:
     # inputs is in the following form  "absadf|adsfab|...."
     # N is the max n_gram order
     predictions = []
     running_probs = []
-    for t in range(1, len(inputs)):
+    for t in range(1, len(inputs)+1):
         texts = inputs[:t].split("|")
         # get counts and vocab
         counts, vocab = train_everygram(N, texts)
@@ -123,15 +123,21 @@ def predict_with_n_gram_back_off(inputs: str, N: int = 3) -> str:
         prefix = "_" * (N - 1 - len(prefix)) + prefix
         # get next char probs
         next_probs = get_next_char_prob(prefix, vocab, N, counts, vocab)
+        # distribute probs to global vocab
+        next_global_probs = np.zeros(len(global_vocab))
+        for char, prob in zip(vocab, next_probs):
+            next_global_probs[global_vocab.get_id(char)] = prob
+        running_probs.append(next_global_probs)
+    return np.array(running_probs)
         # greedy decoding
-        assert len(next_probs) == len(vocab)
-        next_char_index = np.argmax(next_probs)
-        running_probs.append((next_probs, vocab))
-        if len(inputs) > t and inputs[t] == "|":
-            predictions.append("|")
-        else:
-            predictions.append(vocab[next_char_index])
-    return "".join(predictions), running_probs
+    #     assert len(next_probs) == len(vocab)
+    #     next_char_index = np.argmax(next_probs)
+    #     running_probs.append((next_probs, vocab))
+    #     if len(inputs) > t and inputs[t] == "|":
+    #         predictions.append("|")
+    #     else:
+    #         predictions.append(vocab[next_char_index])
+    # return "".join(predictions), running_probs
 
 def l1_distance(p, q):
     # l1

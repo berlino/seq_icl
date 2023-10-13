@@ -53,12 +53,15 @@ class DFA:
         current_node = 0
         path = [current_node]
         for symbol in word.split():
+            try:
+                self.transitions[current_node]
+            except:
+                breakpoint()
             if symbol not in self.transitions[current_node]:
                 return path
             else:
-                path.append(current_node)
                 current_node = self.transitions[current_node][symbol]
-        path.append(current_node)
+                path.append(current_node)
         return path
 
     def sample(self, length=1):
