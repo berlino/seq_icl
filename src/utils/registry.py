@@ -43,6 +43,7 @@ layer = {
     "lru": "src.models.sequence.rnn.lru.LRULayer",
     "lstm": "src.models.sequence.rnn.lstm.LSTMLayer",
     "rwkv": "src.models.sequence.rnn.rwkv.RWKVLayer",
+    "retention": "src.models.sequence.rnn.retention.MultiScaleRetention",
 }
 
 callbacks = {
