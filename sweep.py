@@ -55,9 +55,9 @@ if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
     config = get_config("sweeps/hyper.yaml")
     sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/dfadiff4/"
+    sweep_folder = "hyper/dfadiff5/"
     os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 129 + 199
+    hash_offset = 129 + 201
 
     gpus = {id: None for id in [1, 3, 5, 6, 7, 13, 14]}
     print(len(sweeps))
@@ -76,7 +76,7 @@ if __name__ == "__main__":
                         gpus[gpu_id] = sweep_hash
                         command = (
                             f"export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="debug_dfa_metrics" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="retnet_latt" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
                         )
                         print(command)
                         proc = Popen(

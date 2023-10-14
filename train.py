@@ -523,7 +523,7 @@ class SequenceLightningModule(pl.LightningModule):
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
         if self.current_epoch == 199:
-            return_hidden_outputs = True
+            return_hidden_outputs = False
         else:
             return_hidden_outputs = False
 

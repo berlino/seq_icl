@@ -54,21 +54,42 @@ class SelfAttention(nn.Module):
         q, k, v = qkv.unbind(dim=2)
         softmax_scale = self.softmax_scale or 1.0 / math.sqrt(q.shape[-1])
         scores = torch.einsum('bthd,bshd->bhts', q, k * softmax_scale)
+        mask = None
         if key_padding_mask is not None:
-            padding_mask = torch.full((batch_size, seqlen), -10000.0, dtype=scores.dtype,
-                                      device=scores.device)
-            padding_mask.masked_fill_(key_padding_mask, 0.0)
+            if self.linear_attention:
+                padding_mask = torch.full((batch_size, seqlen), 0.0, dtype=scores.dtype, device=scores.device)
+                padding_mask.masked_fill_(key_padding_mask, 1.0)
+            else:
+                padding_mask = torch.full((batch_size, seqlen), -10000.0, dtype=scores.dtype,
+                                        device=scores.device)
+                padding_mask.masked_fill_(key_padding_mask, 0.0)
             # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
-            scores = scores + rearrange(padding_mask, 'b s -> b 1 1 s')
+            mask = rearrange(padding_mask, 'b s -> b 1 1 s')
         if causal:
             # "triu_tril_cuda_template" not implemented for 'BFloat16'
             # So we have to construct the mask in float
-            causal_mask = torch.triu(torch.full((seqlen, seqlen), -10000.0, device=scores.device), 1)
+            if self.linear_attention:
+                causal_mask = torch.triu(torch.full((seqlen, seqlen), 1.0, device=scores.device, dtype=scores.dtype), 1)
+                # take not
+                causal_mask = 1.0 - causal_mask
+            else:
+                causal_mask = torch.triu(torch.full((seqlen, seqlen), -10000.0, device=scores.device, dtype=scores.dtype), 1)
             # TD [2022-09-30]: Adding is faster than masked_fill_ (idk why, just better kernel I guess)
-            scores = scores + causal_mask.to(dtype=scores.dtype)
+            if mask is None:
+                mask = causal_mask
+            else:
+                if self.linear_attention:
+                    mask = mask * causal_mask
+                else:
+                    mask = mask + causal_mask
+
         if self.linear_attention:
+            if mask is not None:
+                scores = scores * mask.to(scores.dtype)
             attention = scores
         else:
+            if mask is not None:
+                scores = scores + mask.to(scores.dtype)
             attention = torch.softmax(scores, dim=-1, dtype=v.dtype)
         attention_drop = F.dropout(attention, self.dropout_p if self.training else 0.0)
         output = torch.einsum('bhts,bshd->bthd', attention_drop, v)

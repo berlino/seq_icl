@@ -34,9 +34,15 @@ def get_activation_fn(activation):
         return F.gelu
     else:
         raise NotImplementedError
-    
+
 class MultiScaleRetention(nn.Module):
-    def __init__(self, d_model, num_heads=4):
+    def __init__(self,
+                 d_model,
+                 num_heads=4,
+                 layer_idx=None,
+                 device=None,
+                 dtype=None):
+
         super().__init__()
         self.factor = 2
         self.embed_dim = d_model
@@ -44,19 +50,20 @@ class MultiScaleRetention(nn.Module):
         self.head_dim = self.embed_dim * self.factor // self.num_heads
         self.key_dim = self.embed_dim // self.num_heads
         self.scaling = self.key_dim ** -0.5
-        
+        self.layer_idx = layer_idx
+
         self.gate_fn = get_activation_fn(activation="swish")
 
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True)
-        self.g_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True)
-        self.out_proj = nn.Linear(self.embed_dim * self.factor, self.embed_dim, bias=True)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(device=device, dtype=dtype)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(device=device, dtype=dtype)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True).to(device=device, dtype=dtype)
+        self.g_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True).to(device=device, dtype=dtype)
+        self.out_proj = nn.Linear(self.embed_dim * self.factor, self.embed_dim, bias=True).to(device=device, dtype=dtype)
 
         # 1e-5 is used in the official implementation
-        self.group_norm = LayerNorm(self.head_dim, eps=1e-5, elementwise_affine=False)
+        self.group_norm = LayerNorm(self.head_dim, eps=1e-5, elementwise_affine=False).to(device=device, dtype=dtype)
 
-        self.xpos = RetNetRelPos(self.embed_dim, self.num_heads)
+        self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(device=device, dtype=dtype)
 
     def post_init(self):
         nn.init.xavier_uniform_(self.q_proj.weight, gain=2 ** -2.5)
@@ -102,7 +109,7 @@ class MultiScaleRetention(nn.Module):
 
         output = torch.sum(qr * kv, dim=3)
         return output
-    
+
     def chunk_recurrent_forward(
         self,
         qr, kr, v,
@@ -126,7 +133,7 @@ class MultiScaleRetention(nn.Module):
         inner_scale = qk_mat.detach().abs().sum(dim=-1, keepdim=True).clamp(min=1)
         qk_mat = qk_mat / inner_scale
         inner_output = torch.matmul(qk_mat, v) # bsz * num_heads * num_value_heads * chunk_len * head_dim
-        
+
         # reduce kv in one chunk
         kv = kr_t @ (v * mask[:, -1, :, None])
         kv = kv.view(bsz, num_chunks, self.num_heads, self.key_dim, self.head_dim)
@@ -135,7 +142,7 @@ class MultiScaleRetention(nn.Module):
         cross_scale = []
         kv_state = torch.zeros(bsz, self.num_heads, self.key_dim, self.head_dim).to(v)
         kv_scale = torch.ones(bsz, self.num_heads, 1, self.head_dim).to(v)
-        
+
         # accumulate kv by loop
         for i in range(num_chunks):
             kv_recurrent.append(kv_state / kv_scale)
@@ -151,7 +158,7 @@ class MultiScaleRetention(nn.Module):
 
         output = output.transpose(2, 3)
         return output
-    
+
     def forward(
         self,
         x,
@@ -179,12 +186,12 @@ class MultiScaleRetention(nn.Module):
             output = self.chunk_recurrent_forward(qr, kr, v, inner_mask)
         else:
             output = self.parallel_forward(qr, kr, v, inner_mask)
-        
+
         output = self.group_norm(output).reshape(bsz, tgt_len, self.head_dim * self.num_heads)
         output = self.gate_fn(g) * output
         output = self.out_proj(output)
 
-        return output, None
+        return output
 
 class RetNetRelPos(nn.Module):
     def __init__(self, n_embd, n_head):
@@ -195,7 +202,7 @@ class RetNetRelPos(nn.Module):
         self.register_buffer("angle", angle)
         self.register_buffer("decay", decay)
         self.recurrent_chunk_size = None
-        
+
     def forward(self, slen, activate_recurrent=False, chunkwise_recurrent=False):
         if activate_recurrent:
             sin = torch.sin(self.angle * (slen - 1))
