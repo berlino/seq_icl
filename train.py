@@ -380,9 +380,11 @@ class SequenceLightningModule(pl.LightningModule):
     def _get_dfa_accuracy(self, x, y, batch, dfas):
         preds = x.argmax(dim=-1).detach().cpu().numpy()
         inputs = batch[0].detach().cpu().numpy()
-        total_chars = 0.0
-        correct_chars = 0.0
+        char_labels = []
+        total = 0.0
+        correct = 0.0
         for b in range(preds.shape[0]):
+            current_labels = []
             pred_chars = [
                 self.task.dataset.vocab.get_vocab(token) for token in preds[b]
             ]
@@ -402,43 +404,52 @@ class SequenceLightningModule(pl.LightningModule):
                     current_chars = input_chars[: t + 1] + [pred_chars[t]]
                     # take the last example
                     current_word = " ".join(current_chars).split(" | ")[-1]
+                    label = int(dfa(current_word))
                     if current_word:
-                        correct_chars += int(dfa(current_word))
-                        total_chars += 1
+                        current_labels.append(label)
+                        total += 1
+                        correct += label
                 else:
                     print("preds are shorter than inputs")
-                    total_chars += 1
-        dfa_accuracy = correct_chars / total_chars
-        return dfa_accuracy
+                    current_labels.append(0)
+                    total += 1
+            char_labels.append(current_labels)
+        # get the accuracy
+        return char_labels, correct / total
 
-    def _writes_to_file(self, prefix, x, y, batch, dfas, ngram=3, hidden_outputs=None):
+    def _writes_to_file(self, prefix, x, y, batch, dfas, ngram=3, hidden_outputs=None, char_labels=None):
         inputs = batch[0].detach().cpu().numpy()
         targets = y.detach().cpu().numpy()
         x = x.detach().cpu().numpy()
         preds = x.argmax(axis=-1)
         os.makedirs("generations", exist_ok=True)
         os.makedirs(f"generations/{self.current_epoch}_{prefix}_batch", exist_ok=True)
-        for i in range(200):
+        print(os.getcwd())
+        if hidden_outputs is not None:
+            for i in range(200):
 
-            path = f"generations/{self.current_epoch}_{prefix}_batch/{i}.pkl"
+                path = f"generations/{self.current_epoch}_{prefix}_batch/{i}.pkl"
 
-            if not os.path.isfile(path):
-                if hidden_outputs is not None:
-                    saved_hidden_outputs = [
-                        hidden_output.numpy() for hidden_output in hidden_outputs
-                    ]
-                else:
-                    saved_hidden_outputs = None
-                with open(path, "wb") as handle:
-                    pickle.dump(
-                        {
-                            "probs": x,
-                            "vocab": self.task.dataset.vocab.vocab,
-                            "hidden_outputs": saved_hidden_outputs,
-                        },
-                        handle,
-                    )
-                break
+                if not os.path.isfile(path):
+
+                    if hidden_outputs is not None:
+                        saved_hidden_outputs = [
+                            hidden_output.cpu().numpy() for hidden_output in hidden_outputs
+                        ]
+                    else:
+                        saved_hidden_outputs = None
+                    with open(path, "wb") as handle:
+                        pickle.dump(
+                            {
+                                "probs": x,
+                                "dfas": dfas,
+                                "char_labels": char_labels,
+                                "vocab": self.task.dataset.vocab.vocab,
+                                "hidden_outputs": saved_hidden_outputs,
+                            },
+                            handle,
+                        )
+                    break
 
         total_l1_chars = 0.0
         total_l1_model_dfa = 0.0
@@ -508,7 +519,7 @@ class SequenceLightningModule(pl.LightningModule):
 
 
                 print(
-                    f"{input}\t{target}\t{pred}\t{dfa}",
+                    f"{input}\t{target}\t{pred}",
                     file=handle,
                 )
 
@@ -522,8 +533,9 @@ class SequenceLightningModule(pl.LightningModule):
         )
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
-        if self.current_epoch == 199:
-            return_hidden_outputs = False
+        prefix = prefix.replace("final/", "")
+        if self.current_epoch == 200 and prefix == "test":
+            return_hidden_outputs = True
         else:
             return_hidden_outputs = False
 
@@ -531,14 +543,15 @@ class SequenceLightningModule(pl.LightningModule):
         x, y, w = self.forward(batch, return_hidden_outputs=return_hidden_outputs)
 
         if "dfas" in w:
-            dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
+            char_labels, dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
             hidden_outputs = w["hidden_outputs"] if return_hidden_outputs else None
             if self.current_epoch % 50 == 0 or return_hidden_outputs:
                 model_ngram_diff, model_dfa_diff, dfa_ngram_diff, n_gram_loss, n_gram_dfa_acc = self._writes_to_file(
                     prefix, x, y, batch, w["dfas"],
                     ngram=3,
-                    hidden_outputs=hidden_outputs
+                    hidden_outputs=hidden_outputs,
+                    char_labels=char_labels,
                 )
             # elif self.current_epoch % 50 == 1:
             #     n_gram_diff, dfa_diff, dfa_ngram_diff = self._writes_to_file(prefix, x, y, batch, w["dfas"])

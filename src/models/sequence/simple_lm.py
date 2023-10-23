@@ -538,10 +538,10 @@ class SimpleLMHeadModelNoFFN(nn.Module):
     def tie_weights(self):
         self.lm_head.weight = self.embeddings.word_embeddings.weight
 
-    def forward(self, input_ids, position_ids=None, state=None): # state for the repo interface
+    def forward(self, input_ids, position_ids=None, state=None,  return_hidden_outputs=False): # state for the repo interface
         embeddings = self.embeddings(input_ids, position_ids=position_ids)
         embeddings = self.embed_dropout(embeddings)
-        hidden_states = self.mixer(embeddings)
+        hidden_states, hidden_outputs = self.mixer(embeddings)
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
-        return CausalLMOutput(logits=lm_logits), None
+        return CausalLMOutput(logits=lm_logits), hidden_outputs, None

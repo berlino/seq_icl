@@ -10,69 +10,96 @@ from tqdm import tqdm
 from collections import Counter
 
 from src.dataloaders.base import SequenceDataset
+from pythomata import SimpleDFA
 
-
-@dataclasses.dataclass
 class DFA:
     """Represents a DFA"""
 
-    num_nodes: int
-    alphabet: Tuple[str]
-    transitions: Tuple[dict]
-    rng: np.random.Generator
+    def __init__(
+        self,
+        num_nodes: int,
+        alphabet: Tuple[str],
+        transitions: Tuple[dict],
+        rng: np.random.Generator,
+    ):
+        assert len(transitions) == num_nodes
+        transitions = {i: v for i, v in enumerate(transitions)}
+        dfa = SimpleDFA(
+            states = set(list(range(num_nodes))),
+            alphabet = set(alphabet),
+            initial_state = 0,
+            accepting_states = set(list(range(num_nodes))),
+            transition_function = transitions
+        )
+        self.dfa = dfa
+        self.rng = rng
+
+    def _sorted_transitions(self):
+        nodes = sorted(list(self.dfa._transition_function.keys()))
+        transitions = []
+        for node in nodes:
+            node_transitions = self.dfa._transition_function[node]
+            # sort node transitions by outgoing state
+            transitions.append(tuple(sorted(node_transitions.items(), key=lambda item: item[1])))
+        return tuple(transitions)
+
+    def _minimize(self):
+        # minimize super
+        self.dfa = self.dfa.minimize()
+        return self
+
+    def _trim(self):
+        # trim super
+        self.dfa = self.dfa.trim()
+        return self
 
     def __hash__(self):
-        # hash transitions
-        transitions = tuple(
-            tuple(sorted(transition.items())) for transition in self.transitions
-        )
-        return hash((self.num_nodes, self.alphabet, transitions))
+        # Here I assume the initial state is always the smallest node
+        return hash(self._sorted_transitions())
 
-    def __post_init__(self):
-        assert len(self.transitions) == self.num_nodes
 
     def __call__(self, word: str):
-        current_node = 0
+        current_node = self.dfa._initial_state
         for symbol in word.split():
-            if symbol not in self.transitions[current_node]:
+            if symbol not in self.dfa._transition_function[current_node]:
                 return False
             else:
-                current_node = self.transitions[current_node][symbol]
+                current_node = self.dfa._transition_function[current_node][symbol]
         return True
 
     def forward(self, word: str):
-        current_node = 0
+        current_node = self.dfa._initial_state
         for symbol in word.split():
-            if symbol not in self.transitions[current_node]:
+            if symbol not in self.dfa._transition_function[current_node]:
                 return None
             else:
-                current_node = self.transitions[current_node][symbol]
+                current_node = self.dfa._transition_function[current_node][symbol]
         return current_node
 
     def trace(self, word: str):
-        current_node = 0
+        current_node = self.dfa._initial_state
         path = [current_node]
         for symbol in word.split():
             try:
-                self.transitions[current_node]
+                self.dfa._transition_function[current_node]
             except:
                 breakpoint()
-            if symbol not in self.transitions[current_node]:
+            if symbol not in self.dfa._transition_function[current_node]:
                 return path
             else:
-                current_node = self.transitions[current_node][symbol]
+                current_node = self.dfa._transition_function[current_node][symbol]
                 path.append(current_node)
         return path
 
     def sample(self, length=1):
         """Samples a random word from the DFA"""
-        current_node = 0
+        current_node = self.dfa._initial_state
         word = ""
         for _ in range(length):
-            outgoing_symbols = list(self.transitions[current_node].keys())
+            outgoing_symbols = list(self.dfa._transition_function[current_node].keys())
             symbol = self.rng.choice(outgoing_symbols)
             word += symbol + " "
-            current_node = self.transitions[current_node][symbol]
+            current_node = self.dfa._transition_function[current_node][symbol]
         word = word.rstrip()
         return word
 
@@ -284,6 +311,7 @@ class ICLDFADataModule(SequenceDataset):
             )
             sampler.rng = np.random.default_rng(self.rng.integers(0, 2**32))
             dfa = sampler.sample()
+            dfa._minimize()._trim()
             DFAs.add(dfa)
             if len(DFAs) >= self.num_examples + self.num_test_examples:
                 break

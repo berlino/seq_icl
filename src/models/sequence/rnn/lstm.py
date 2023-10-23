@@ -20,12 +20,12 @@ class LSTMLayer(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layer, batch_first=True, dropout=dropout, bidirectional=False).to(device)
-        
+
         self.layer_idx = layer_idx
 
         if reinit:
             self._reinitialize()
-    
+
     def _reinitialize(self):
         """
         Tensorflow/Keras-like initialization
@@ -48,7 +48,7 @@ class LSTMLayer(nn.Module):
                     nn.init.xavier_uniform_(p.data)
                 elif 'bias' in name:
                     p.data.fill_(0)
-    
+
     def forward(self, x):
         output, h = self.lstm(x)
-        return output
+        return output, h

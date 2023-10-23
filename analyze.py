@@ -48,7 +48,7 @@ def get_dfa_probs(input, dfa, vocab):
                 continue
             current_word = " ".join(list(example[:t]))
             node = dfa.forward(current_word)
-            possibilities = list(dfa.transitions[node].keys())
+            possibilities = list(dfa.dfa._transition_function[node].keys())
             probs.append(get_uniform_probs(possibilities,  vocab))
     return np.array(probs)
 
