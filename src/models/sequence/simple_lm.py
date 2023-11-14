@@ -115,8 +115,6 @@ class MHA(nn.Module):
         self.dwconv = dwconv
         self.return_residual = return_residual
         self.linear_attention = linear_attention
-        if self.linear_attention:
-            print("Using linear attention")
 
         self.num_heads = num_heads
         assert self.embed_dim % num_heads == 0, "self.kdim must be divisible by num_heads"
@@ -136,6 +134,9 @@ class MHA(nn.Module):
 
         self.inner_attn = inner_attn_cls(causal=causal, softmax_scale=softmax_scale, linear_attention=linear_attention,
                                          attention_dropout=dropout)
+
+        # if self.linear_attention:
+        #     self.group_norm = nn.LayerNorm(self.head_dim, eps=1e-5, elementwise_affine=False).to(device=device, dtype=dtype)
 
         # output projection always have the bias (for now)
         self.out_proj = linear_cls(embed_dim, embed_dim, **factory_kwargs)
@@ -171,6 +172,8 @@ class MHA(nn.Module):
         qkv = rearrange(qkv, '... (three h d) -> ... three h d', three=3, d=self.head_dim)
 
         context = self.inner_attn(qkv, return_attention=return_attention, **kwargs)
+
+        # context = self.group_norm(context)
 
         out = self.out_proj(rearrange(context, '... h d -> ... (h d)'))
         return out if not self.return_residual else (out, x)

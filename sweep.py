@@ -45,6 +45,7 @@ def is_free(gpu_id):
         free_mem = torch.cuda.get_device_properties(
             gpu_id
         ).total_memory - torch.cuda.memory_allocated(gpu_id)
+        print(free_mem)
         return free_mem > 20e9
     except:
         print(f"GPU {gpu_id} is not available")
@@ -55,11 +56,11 @@ if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
     config = get_config("sweeps/hyper.yaml")
     sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/dfadiff5/"
+    sweep_folder = "hyper/lineartf/"
     os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 129 + 201
+    hash_offset = 129 + 201 + 10001
 
-    gpus = {id: None for id in [1, 3, 5, 6, 7, 13, 14]}
+    gpus = {id: None for id in [2, 3, 4, 5, 6, 7, 13, 14, 15]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -76,7 +77,7 @@ if __name__ == "__main__":
                         gpus[gpu_id] = sweep_hash
                         command = (
                             f"export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="retnet_latt" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="large_transformer" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
                         )
                         print(command)
                         proc = Popen(

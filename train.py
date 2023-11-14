@@ -534,7 +534,7 @@ class SequenceLightningModule(pl.LightningModule):
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
         prefix = prefix.replace("final/", "")
-        if self.current_epoch == 200 and prefix == "test":
+        if (self.current_epoch == 200 or self.current_epoch == 201) and (prefix == "test"):
             return_hidden_outputs = True
         else:
             return_hidden_outputs = False
@@ -824,6 +824,7 @@ class SequenceLightningModule(pl.LightningModule):
         # Return all val + test loaders
         val_loaders = self.dataset.val_dataloader(**self.hparams.loader)
         test_loaders = self.dataset.test_dataloader(**self.hparams.loader)
+        # test_loaders = self.dataset.train_dataloader(**self.hparams.loader)
         val_loader_names, val_loaders = self._eval_dataloaders_names(val_loaders, "val")
         test_loader_names, test_loaders = self._eval_dataloaders_names(
             test_loaders, "test"
