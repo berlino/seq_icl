@@ -27,6 +27,7 @@ def read_hidden_states(folder):
     # sort files with ids
     files = [file for _, file in sorted(zip(ids, files))]
     hidden_states = []
+    attentions = []
     dfas = []
     char_labels = []
     probs = []
@@ -35,6 +36,7 @@ def read_hidden_states(folder):
         with open(file, "rb") as f:
             data = pickle.load(f)
             hidden_states.append(data["hidden_outputs"])
+            attentions.append(data["attention_scores"])
             dfas += data["dfas"]
             char_labels += data["char_labels"]
             probs.append(data["probs"])
@@ -42,14 +44,20 @@ def read_hidden_states(folder):
                 vocab = data["vocab"]
 
     probs = np.concatenate(probs, axis=0)
-
     data = []
+    attention_data = []
     for layer in range(len(hidden_states[0])):
         # concat all hidden states
         layer_states = [state[layer] for state in hidden_states]
         layer_states = np.concatenate(layer_states, axis=0)
         data.append(layer_states)
-    return data, dfas, char_labels, probs, vocab
+    for layer in range(len(attentions[0])):
+        # concat all hidden states
+        layer_states = [state[layer] for state in attentions]
+        layer_states = np.concatenate(layer_states, axis=0)
+        attention_data.append(layer_states)
+
+    return data, dfas, char_labels, probs, vocab, attention_data
 
 
 def get_dfa_states(input, dfa, in_states=False):
@@ -70,6 +78,7 @@ def get_results(file):
     basename = os.path.basename(file)
     basename = basename.replace("_train.txt", "")
     basename = basename.replace("_test.txt", "")
+    basename = basename.replace("_val.txt", "")
     fileid = int(basename)
     df = pd.read_csv(
         file,
@@ -86,7 +95,7 @@ def get_results(file):
         ],
     )
     pkl_folder = file.replace(".txt", "_batch")
-    hidden_states, dfas, char_labels, probs, vocab = read_hidden_states(pkl_folder)
+    hidden_states, dfas, char_labels, probs, vocab, attentions = read_hidden_states(pkl_folder)
     df["dfa"] = dfas
     df["char_labels"] = char_labels
     data = []
@@ -102,6 +111,8 @@ def get_results(file):
         datum["states"] = get_dfa_states(datum["input"], datum["dfa"], in_states=False)
         if hidden_states is not None:
             datum["hidden_outputs"] = [states[index] for states in hidden_states]
+        if attentions is not None:
+            datum["attention_scores"] = [states[index] for states in attentions]
         assert len(datum["input"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["input"]), datum["hidden_outputs"][0].shape[0])
         assert len(datum["states"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["states"]), datum["hidden_outputs"][0].shape[0])
         data.append(datum)
@@ -154,23 +165,29 @@ class StateProbeDataset(Dataset):
 
     def __getitem__(self, index):
         state_info = self.states[index]
-        time_step = np.random.choice(list(range(1, len(state_info))))
+        char_info = ""
+        while len(char_info) < 2:
+            time_step = np.random.choice(list(range(1, len(state_info))))
+            char_info = self.chars[index][:time_step + 1]
+
         state = state_info[time_step]
         hidden = torch.tensor(self.hiddens[index][time_step])
-        char_info = self.chars[index][:time_step + 1]
+
         if self.bigram:
             # sample an existing bigram
             # t = np.random.choice(list(range(1, len(char_info))))
             char1, char2 = char_info[-2], char_info[-1]
             # count bigrams
             count = 0
+            tlen = 0
             for i in range(len(char_info) - 1):
                 if char_info[i] == char1 and char_info[i + 1] == char2:
                     count += 1
+                if char_info[i] == char1:
+                    tlen += 1
             char1 = self.vocab.index(char1)
             char2 = self.vocab.index(char2)
             char = [char1, char2]
-            tlen = len(char_info) - 1
         else:
             # sample a bigram
             char = char_info[-1]
@@ -255,6 +272,7 @@ def train(args, hiddens, states, chars, vocab):
             print("val loss:", val_loss)
         model.train()
 
+    wandb.log({"val_loss_final": val_loss})
     return model, optimizer
 
 def run(args, results):
@@ -272,10 +290,10 @@ if __name__ == "__main__":
     parser.add_argument("--exp", type=str, default="transformers/12")
     parser.add_argument("--layer", type=int, default=1)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--n_epochs", type=int, default=100000)
+    parser.add_argument("--n_epochs", type=int, default=4000)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--min_lr", type=float, default=1e-4)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--use_ratio", action="store_true")
     parser.add_argument("--bigram", action="store_true")
@@ -284,17 +302,23 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.use_wandb:
         import wandb
-        wandb.init(project="dfa_probe_linear_transformer", config=args)
+        wandb.init(project="dfa_probe_new_bigram", config=args)
         wandb.config.update(args)
 
-    exp_folders = {
-            "transformer/8": "outputs/2023-11-06/10-45-03-271510",
-            "transformers/4": "outputs/2023-11-10/15-46-00-948405",
-            "transformers/12": "outputs/2023-11-12/19-20-15-010722",
-            "linear_transformer/8": "outputs/2023-11-14/10-30-45-591337",
-        }
+    exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
+                   'transformer/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-041944',
+                   'transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-295893',
+                   'transformer/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-403698',
+                   'linear_transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-52-854931',
+                   'retnet/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-646480',
+                   'rwkv/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-588119',
+                   'h3/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-27-29-253904',
+                   'hyena/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-614857',
+                   'lstm/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-00-28-036885',
+                   'transformer/12': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-222033',
+                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063'}
 
-    results = get_results(exp_folders[args.exp] + "/generations/200_test.txt")
+    results = get_results(exp_folders[args.exp] + "/generations/200_val.txt")
     model, optimizer = run(args, results)
 
 
