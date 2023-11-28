@@ -3,7 +3,7 @@ import os
 import subprocess
 import glob
 
-def prepare_video(glob_str, folder):
+def prepare_video(glob_str, folder, filename):
     # create a new folder
     files = glob.glob(glob_str)
     os.makedirs(folder, exist_ok=True)
@@ -23,7 +23,7 @@ def prepare_video(glob_str, folder):
         "-pattern_type", "glob",
         '-i', f'{folder}/*.png',
         '-pix_fmt', 'yuv420p',
-        f"{folder}/video.mp4"
+        f"{folder}/{filename}.mp4"
     ]
 
     # Execute the FFmpeg command using subprocess
@@ -32,6 +32,10 @@ def prepare_video(glob_str, folder):
         # print(f"Video '{output_video}' created successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
+
+    # remove png files
+    os.system(f"rm {folder}/*.png")
+    return f"{folder}/{filename}.mp4"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
