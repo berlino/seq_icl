@@ -68,7 +68,7 @@ class H3Conv(nn.Module):
         # Don't use FusedDense since the layout is H first
         self.output_linear = nn.Linear(self.d_model, self.d_model)
 
-    def forward(self, u, inference_params=None):
+    def forward(self, u, inference_params=None, return_attention=None):
         """
         u: (B L H)
 
@@ -146,5 +146,6 @@ class H3Conv(nn.Module):
         y = self.output_linear(y)
         if L_og < L:
             y = y[:, :L_og, :]
-
+        if return_attention:
+            return y, None
         return y

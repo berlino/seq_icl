@@ -7,7 +7,8 @@ model:
   d_model: 32
   vocab_size: ${dataset.vocab_size}
   embed_dropout: 0.1
+  n_layer: 2
   layer:
     _name_: lstm
-    n_layer: 2
+    n_layer: 1
     reinit: True

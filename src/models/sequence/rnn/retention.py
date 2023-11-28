@@ -163,7 +163,8 @@ class MultiScaleRetention(nn.Module):
         self,
         x,
         incremental_state=None,
-        chunkwise_recurrent=False
+        chunkwise_recurrent=False,
+        return_attention=False,
     ):
         bsz, tgt_len, _ = x.size()
         (sin, cos), inner_mask = self.xpos(tgt_len)
@@ -190,7 +191,8 @@ class MultiScaleRetention(nn.Module):
         output = self.group_norm(output).reshape(bsz, tgt_len, self.head_dim * self.num_heads)
         output = self.gate_fn(g) * output
         output = self.out_proj(output)
-
+        if return_attention:
+            return output, None
         return output
 
 class RetNetRelPos(nn.Module):

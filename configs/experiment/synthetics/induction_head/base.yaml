@@ -1,6 +1,6 @@
 # @package _global_
 defaults:
-  - /pipeline: dfa
+  - /pipeline: induction_head
   - override /scheduler: cosine_warmup_timm
 
 trainer:

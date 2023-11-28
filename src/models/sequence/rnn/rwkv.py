@@ -48,7 +48,7 @@ class RWKVLayer(nn.Module):
             last_x = torch.cat((last_x, x[..., :-1, :]), dim=-2)
         return last_x
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, return_attention=False) -> Tensor:
         bsz, _, _ = x.shape
 
         last_x = self.init_x.repeat_interleave(bsz, dim=0)
@@ -65,4 +65,6 @@ class RWKVLayer(nn.Module):
         wkv, next_state = self.wkv_fn(w, u, k, v, last_state)
         rwkv = wkv * sr
 
+        if return_attention:
+            return self.output(rwkv), None
         return self.output(rwkv)

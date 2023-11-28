@@ -50,5 +50,5 @@ class LSTMLayer(nn.Module):
                     p.data.fill_(0)
 
     def forward(self, x):
-        output, h = self.lstm(x)
-        return output, h
+        output, _ = self.lstm(x)
+        return output

@@ -17,7 +17,7 @@ train:
   mode: max
 
 task:
-  _name_: lm
+  _name_: dfalm
   loss: cross_entropy
   torchmetrics: ['perplexity']
   metrics: ['accuracy_ignore_index']
