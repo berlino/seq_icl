@@ -218,6 +218,7 @@ class SequenceLightningModule(pl.LightningModule):
         # Extract the modules so they show up in the top level parameter count
         self.encoder = U.PassthroughSequential(self.task.encoder, encoder)
         self.decoder = U.PassthroughSequential(decoder, self.task.decoder)
+
         self.loss = self.task.loss
         self.loss_val = self.task.loss
         if hasattr(self.task, "loss_val"):
@@ -229,22 +230,26 @@ class SequenceLightningModule(pl.LightningModule):
 
         os.makedirs("samples", exist_ok=True)
 
-        for name, dataloader in zip(*self._eval_dataloaders()):
-            dataset = dataloader.dataset
+        if "dfa" in self.hparams["dataset"]["_name_"]:
+            for name, dataloader in zip(*self._eval_dataloaders()):
+                dataset = dataloader.dataset
+                tokenizer = dataset.tokenizer
+                with open(f"samples/{name}.txt", "w") as f:
+                    for index in range(len(dataset)):
+                        data = dataset[index]
+                        x, y, dfa = data
+                        print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+            train_dataloader = self.train_dataloader()
+            dataset = train_dataloader.dataset
+
+
             tokenizer = dataset.tokenizer
-            with open(f"samples/{name}.txt", "w") as f:
+
+            with open(f"samples/train.txt", "w") as f:
                 for index in range(len(dataset)):
                     data = dataset[index]
                     x, y, dfa = data
                     print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
-        train_dataloader = self.train_dataloader()
-        dataset = train_dataloader.dataset
-        tokenizer = dataset.tokenizer
-        with open(f"samples/train.txt", "w") as f:
-            for index in range(len(dataset)):
-                data = dataset[index]
-                x, y, dfa = data
-                print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
 
     def load_state_dict(self, state_dict, strict=True):
         if self.hparams.train.pretrained_model_state_hook["_name_"] is not None:
@@ -425,7 +430,12 @@ class SequenceLightningModule(pl.LightningModule):
         os.makedirs("generations", exist_ok=True)
         os.makedirs(f"generations/{self.current_epoch}_{prefix}_batch", exist_ok=True)
         print(os.getcwd())
+        attention_scores = None
         if hidden_outputs is not None:
+            # check if hidden_outputs is a tuple
+            if isinstance(hidden_outputs, tuple):
+                hidden_outputs, attention_scores = hidden_outputs
+
             for i in range(200):
 
                 path = f"generations/{self.current_epoch}_{prefix}_batch/{i}.pkl"
@@ -438,6 +448,14 @@ class SequenceLightningModule(pl.LightningModule):
                         ]
                     else:
                         saved_hidden_outputs = None
+
+                    if attention_scores is not None:
+                        saved_attention_scores = [
+                            attention_score.cpu().numpy() for attention_score in attention_scores
+                        ]
+                    else:
+                        saved_attention_scores = None
+
                     with open(path, "wb") as handle:
                         pickle.dump(
                             {
@@ -446,6 +464,7 @@ class SequenceLightningModule(pl.LightningModule):
                                 "char_labels": char_labels,
                                 "vocab": self.task.dataset.vocab.vocab,
                                 "hidden_outputs": saved_hidden_outputs,
+                                "attention_scores": saved_attention_scores,
                             },
                             handle,
                         )
@@ -534,7 +553,7 @@ class SequenceLightningModule(pl.LightningModule):
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
         prefix = prefix.replace("final/", "")
-        if (self.current_epoch == 200 or self.current_epoch == 201) and (prefix == "test"):
+        if (self.current_epoch == 200 or self.current_epoch == 201) and (prefix == "test" or prefix == "val"):
             return_hidden_outputs = True
         else:
             return_hidden_outputs = False
@@ -546,6 +565,7 @@ class SequenceLightningModule(pl.LightningModule):
             char_labels, dfa_accuracy = self._get_dfa_accuracy(x, y, batch, w["dfas"])
             # write to a file
             hidden_outputs = w["hidden_outputs"] if return_hidden_outputs else None
+
             if self.current_epoch % 50 == 0 or return_hidden_outputs:
                 model_ngram_diff, model_dfa_diff, dfa_ngram_diff, n_gram_loss, n_gram_dfa_acc = self._writes_to_file(
                     prefix, x, y, batch, w["dfas"],
@@ -568,7 +588,7 @@ class SequenceLightningModule(pl.LightningModule):
         # Metrics
         metrics = self.metrics(x, y, **w)
         metrics["loss"] = loss
-        if prefix != "train":
+        if prefix != "train" and "dfas" in w:
             metrics["dfa_accuracy"] = dfa_accuracy
             if self.current_epoch % 50 == 0 or return_hidden_outputs:
                 metrics["model_ngram_diff"] = model_ngram_diff

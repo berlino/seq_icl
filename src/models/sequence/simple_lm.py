@@ -93,7 +93,11 @@ class SelfAttention(nn.Module):
             attention = torch.softmax(scores, dim=-1, dtype=v.dtype)
         attention_drop = F.dropout(attention, self.dropout_p if self.training else 0.0)
         output = torch.einsum('bhts,bshd->bthd', attention_drop, v)
-        return output
+
+        if return_attention:
+            return output, attention
+        else:
+            return output
 
 class MHA(nn.Module):
     """Multi-head self-attention and cross-attention
@@ -117,7 +121,7 @@ class MHA(nn.Module):
         self.linear_attention = linear_attention
 
         self.num_heads = num_heads
-        assert self.embed_dim % num_heads == 0, "self.kdim must be divisible by num_heads"
+        assert self.embed_dim % num_heads == 0, "self.kdim must be divisibl e by num_heads"
         self.head_dim = self.embed_dim // num_heads
 
         linear_cls = nn.Linear
@@ -173,10 +177,20 @@ class MHA(nn.Module):
 
         context = self.inner_attn(qkv, return_attention=return_attention, **kwargs)
 
+        if return_attention:
+            context, attentions = context
+            if self.return_residual:
+                x = (x, attentions)
+            else:
+                x = (attentions, )
+
         # context = self.group_norm(context)
 
         out = self.out_proj(rearrange(context, '... h d -> ... (h d)'))
-        return out if not self.return_residual else (out, x)
+        if self.return_residual or return_attention:
+            return (out, x)
+        else:
+            return out
 
 class GPT2Embeddings(nn.Module):
 
@@ -247,6 +261,7 @@ class Block(nn.Module):
                  dropout_cls=nn.Dropout, prenorm=True, resid_dropout1=0., resid_dropout2=0.,
                  drop_path1=0., drop_path2=0.,
                  return_residual=False,
+                 return_attention=False,
                  residual_in_fp32=False):
         """
         From https://github.com/HazyResearch/flash-attention/blob/main/flash_attn/modules/block.py
@@ -268,6 +283,7 @@ class Block(nn.Module):
         self.prenorm = prenorm
         self.return_residual = return_residual
         self.residual_in_fp32 = residual_in_fp32
+        self.return_attention = return_attention
         if self.residual_in_fp32:
             assert self.prenorm, 'residual_in_fp32 is only compatible with prenorm=True'
         if mixer_cls is None:
@@ -285,7 +301,7 @@ class Block(nn.Module):
             self.norm2 = norm_cls(dim)
 
     def forward(self, hidden_states, residual = None,
-                mixer_subset=None, mixer_kwargs=None, return_attention=False):
+                mixer_subset=None, mixer_kwargs=None):
         r"""Pass the input through the encoder layer.
         Args:
             hidden_states: the sequence to the encoder layer (required).
@@ -294,6 +310,7 @@ class Block(nn.Module):
                 before applying the query projection. Useful for e.g., ViT where we only care
                 about the CLS token in the last layer.
         """
+        attentions = None
         if self.prenorm:
             dropped = self.drop_path1(self.dropout1(hidden_states))
             residual = (dropped + residual) if residual is not None else dropped
@@ -304,7 +321,10 @@ class Block(nn.Module):
                 mixer_kwargs = {}
             if mixer_subset is not None:
                 mixer_kwargs['mixer_subset'] = mixer_subset
-            hidden_states = self.mixer(hidden_states, **mixer_kwargs)
+            hidden_states = self.mixer(hidden_states, return_attention=self.return_attention, **mixer_kwargs)
+            if self.return_attention:  # mixer out is actually a pair here
+                hidden_states, attentions = hidden_states
+                attentions = attentions[0]
             if mixer_subset is not None:
                 residual = residual[:, mixer_subset]
             if not isinstance(self.mlp, nn.Identity):
@@ -315,7 +335,9 @@ class Block(nn.Module):
                     residual = residual.to(torch.float32)
 
                 hidden_states = self.mlp(hidden_states)
-            return hidden_states, residual
+
+            return hidden_states, residual, attentions
+
         else:
             assert residual is None
             mixer_out = self.mixer(
@@ -323,6 +345,9 @@ class Block(nn.Module):
             )
             if self.return_residual:  # mixer out is actually a pair here
                 mixer_out, hidden_states = mixer_out
+
+            if self.return_attention:
+                hidden_states, attentions = hidden_states
 
             hidden_states = self.norm1((self.drop_path1(self.dropout1(mixer_out))
                                         + hidden_states).to(dtype=self.norm1.weight.dtype))
@@ -334,8 +359,10 @@ class Block(nn.Module):
 
                 hidden_states = self.norm2((self.drop_path2(self.dropout2(mlp_out))
                                             + hidden_states).to(dtype=self.norm2.weight.dtype))
-
-            return hidden_states
+            if self.return_attention:
+                return hidden_states, attentions
+            else:
+                return hidden_states
 
 def create_mixer_cls(layer=None,
                      attn_layer_idx=None, attn_cfg=None, layer_idx=None, linear_attention=False,
@@ -367,7 +394,7 @@ def create_block(d_model, d_inner=None,
                  layer=None, attn_layer_idx=None,
                  attn_cfg=None, layer_norm_epsilon=1e-5,
                  resid_dropout1=0.0, resid_dropout2=0.0, residual_in_fp32=False,
-                 layer_idx=None, linear_attention=False,
+                 layer_idx=None, linear_attention=False, return_attention=False,
                  device=None, dtype=None):
     factory_kwargs = {'device': device, 'dtype': dtype}
     mixer_cls = create_mixer_cls(layer=layer,
@@ -379,7 +406,7 @@ def create_block(d_model, d_inner=None,
                              **factory_kwargs)
     norm_cls = partial(nn.LayerNorm, eps=layer_norm_epsilon, **factory_kwargs)
     block = Block(d_model, mixer_cls, mlp_cls, norm_cls=norm_cls,
-                  prenorm=True, resid_dropout1=resid_dropout1, resid_dropout2=resid_dropout2,residual_in_fp32=residual_in_fp32)
+                  prenorm=True, resid_dropout1=resid_dropout1, resid_dropout2=resid_dropout2,residual_in_fp32=residual_in_fp32, return_attention=return_attention)
     block.layer_idx = layer_idx
     return block
 
@@ -423,7 +450,7 @@ class LMBackbone(nn.Module):
                  process_group=None, layer=None,
                  attn_layer_idx=None, attn_cfg=None, max_position_embeddings=0,
                  resid_dropout: float = 0.0, embed_dropout: float = 0.1,
-                 layer_norm_epsilon: float = 1e-5, initializer_cfg=None,residual_in_fp32=False,
+                 layer_norm_epsilon: float = 1e-5, initializer_cfg=None,residual_in_fp32=False, return_attention=False,
                  device=None, dtype=None, linear_attention=False, **kwargs) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
@@ -440,6 +467,7 @@ class LMBackbone(nn.Module):
             resid_dropout1=embed_dropout if i == 0 else resid_dropout,
             resid_dropout2=resid_dropout, residual_in_fp32=residual_in_fp32,layer_idx=i,
             linear_attention=linear_attention,
+            return_attention=return_attention,
             **factory_kwargs,
         ) for i in range(n_layer)])
 
@@ -454,17 +482,22 @@ class LMBackbone(nn.Module):
         residual = None
         if return_hidden_outputs:
             hidden_outputs = [hidden_states.detach().cpu()]
+            attention_outputs = []
         else:
             hidden_outputs = None
+            attention_outputs = None
+
         for layer in self.layers:
-            hidden_states, residual = layer(hidden_states, residual)
+            hidden_states, residual, attentions = layer(hidden_states, residual)
             if return_hidden_outputs:
                 hidden_outputs.append(hidden_states.detach().cpu())
+                if attention_outputs is not None and attentions is not None:
+                    attention_outputs.append(attentions.detach().cpu())
 
         dropped = self.drop_f(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped
         hidden_states = self.ln_f(residual.to(dtype=self.ln_f.weight.dtype))
-        hidden_states = {"hidden_states": hidden_states, "hidden_outputs": hidden_outputs}
+        hidden_states = {"hidden_states": hidden_states, "hidden_outputs": hidden_outputs, "attention_outputs": attention_outputs}
 
         return hidden_states
 
@@ -477,6 +510,7 @@ class SimpleLMHeadModel(nn.Module):
                  layer_norm_epsilon: float = 1e-5, initializer_cfg=None,residual_in_fp32=False,
                  pad_vocab_size_multiple: int = 1,
                  linear_attention=False,
+                 return_attention=False,
                  device=None, dtype=None, **kwargs) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
@@ -490,6 +524,7 @@ class SimpleLMHeadModel(nn.Module):
             layer_norm_epsilon=layer_norm_epsilon,
             linear_attention=linear_attention,
             initializer_cfg=initializer_cfg, residual_in_fp32=residual_in_fp32,
+            return_attention=return_attention,
             **factory_kwargs, **kwargs
         )
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
@@ -504,7 +539,7 @@ class SimpleLMHeadModel(nn.Module):
 
     def forward(self, input_ids, position_ids=None, state=None, return_hidden_outputs=False): # state for the repo interface
         hidden_states = self.backbone(input_ids, position_ids=position_ids, return_hidden_outputs=return_hidden_outputs)
-        hidden_states, hidden_outputs = hidden_states["hidden_states"], hidden_states["hidden_outputs"]
+        hidden_states, hidden_outputs = hidden_states["hidden_states"], (hidden_states["hidden_outputs"], hidden_states["attention_outputs"])
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
         return CausalLMOutput(logits=lm_logits), hidden_outputs, None
@@ -517,6 +552,7 @@ class SimpleLMHeadModelNoFFN(nn.Module):
 
     def __init__(self, d_model: int, vocab_size: int,
                  layer=None, max_position_embeddings=-1,
+                 n_layer=1,
                  embed_dropout: float = 0.1,
                  pad_vocab_size_multiple: int = 1,
                  device=None, dtype=None, **kwargs) -> None:
@@ -533,7 +569,8 @@ class SimpleLMHeadModelNoFFN(nn.Module):
         self.embed_dropout = nn.Dropout(embed_dropout)
 
         mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=None, **factory_kwargs)
-        self.mixer = mixer_cls(d_model)
+
+        self.mixer = nn.ModuleList([mixer_cls(d_model) for _ in range(n_layer)])
 
         self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
         self.tie_weights()
@@ -543,8 +580,17 @@ class SimpleLMHeadModelNoFFN(nn.Module):
 
     def forward(self, input_ids, position_ids=None, state=None,  return_hidden_outputs=False): # state for the repo interface
         embeddings = self.embeddings(input_ids, position_ids=position_ids)
-        embeddings = self.embed_dropout(embeddings)
-        hidden_states, hidden_outputs = self.mixer(embeddings)
+        hidden_states = self.embed_dropout(embeddings)
+        if return_hidden_outputs:
+            hidden_outputs = [hidden_states.detach().cpu()]
+        else:
+            hidden_outputs = None
+
+        for mixer in self.mixer:
+            hidden_states = mixer(embeddings)
+            if return_hidden_outputs:
+                hidden_outputs.append(hidden_states.detach().cpu())
+        # hidden_states, hidden_outputs = self.mixer(embeddings)
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
         return CausalLMOutput(logits=lm_logits), hidden_outputs, None

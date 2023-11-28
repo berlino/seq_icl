@@ -160,7 +160,7 @@ class Scalar(nn.Module):
         return x * self.c
 
 class LMTask(BaseTask):
-    def forward(self, batch, encoder, model, decoder, _state):
+    def forward(self, batch, encoder, model, decoder, _state, **unused_kwargs):
         """Passes a batch through the encoder, backbone, and decoder"""
         # z holds arguments such as sequence length
         x, y, *z = batch # z holds extra dataloader info such as resolution
@@ -200,7 +200,8 @@ class DFALMTask(LMTask):
         x = x.logits
         # x = rearrange(x, '... C -> (...) C')
         # y = rearrange(y, '... -> (...)')
-        w["dfas"] = z
+        if z:
+            w["dfas"] = z
         w["hidden_outputs"] = hidden_outputs
         return x, y, w
 
