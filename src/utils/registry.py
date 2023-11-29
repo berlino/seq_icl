@@ -31,6 +31,7 @@ layer = {
     "id": "src.models.sequence.base.SequenceIdentity",
     "ff": "src.models.sequence.ff.FF",
     "mha": "src.models.sequence.mha.MultiheadAttention",
+    "mha-rope": "src.models.sequence.mha_rope.MultiHeadAttentionWithRope",
     "s4d": "src.models.sequence.ssm.s4d.S4D",
     "s4_simple": "src.models.sequence.ssm.s4_simple.SimpleS4Wrapper",
     "long-conv": "src.models.sequence.long_conv.LongConv",

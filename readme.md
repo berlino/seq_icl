@@ -36,6 +36,7 @@ python -m train experiment=synthetics/induction_head/rwkv
 To run the training,
 ```bash
 python -m train experiment=dfa/lstm
+python -m train experiment=dfa/transformer+
 ```
 
 

@@ -22,3 +22,9 @@ torchtext # LRA
 datasets # LRA
 # timm==0.5.4 # imagenet
 # lightning-bolts # imagenet
+
+wandb
+hydra_core
+opt_einsum
+rich
+pythomata

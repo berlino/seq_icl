@@ -21,9 +21,7 @@ class MultiheadAttention(SequenceModule):
     def forward(self, src, attn_mask=None, key_padding_mask=None, state=None, **kwargs):
         """ state should represent a mask and key padding mask """
         if self.causal and attn_mask is None:
-            attn_mask = torch.triu(torch.ones(src.size(-2), src.size(-2),
-                                              dtype=torch.bool, device=src.device),
-                                       diagonal=1)
+            attn_mask = torch.triu(torch.ones(src.size(-2), src.size(-2), dtype=torch.bool, device=src.device), diagonal=1)
         # attn_mask, key_padding_mask = state
         # Note that this returns None for the second argument
         y, _ = self.mha(src, src, src, attn_mask=attn_mask, key_padding_mask=key_padding_mask, need_weights=False)

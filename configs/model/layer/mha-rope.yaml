@@ -1,0 +1,3 @@
+_name_: mha-rope
+causal: true
+n_heads: 8
