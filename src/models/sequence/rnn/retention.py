@@ -38,7 +38,7 @@ def get_activation_fn(activation):
 class MultiScaleRetention(nn.Module):
     def __init__(self,
                  d_model,
-                 num_heads=4,
+                 n_heads=4,
                  layer_idx=None,
                  device=None,
                  dtype=None):
@@ -46,7 +46,7 @@ class MultiScaleRetention(nn.Module):
         super().__init__()
         self.factor = 2
         self.embed_dim = d_model
-        self.num_heads = num_heads
+        self.num_heads = n_heads
         self.head_dim = self.embed_dim * self.factor // self.num_heads
         self.key_dim = self.embed_dim // self.num_heads
         self.scaling = self.key_dim ** -0.5

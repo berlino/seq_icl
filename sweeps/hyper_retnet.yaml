@@ -20,7 +20,7 @@ parameters:
   optimizer.weight_decay:
     values: [0.01, 0.1]
   experiment:
-    values: ["dfa/linear_transformer", "dfa/transformer"]
+    values: ["dfa/retnet"]
 
 command:
   - ${env}
