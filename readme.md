@@ -1,4 +1,13 @@
 
+## Setup
+
+```bash
+conda create -n seq_icl python=3.11
+pip install -r requirements.txt
+```
+
+Note that python version is 3.11.
+
 ### Experiments on Associative Recall
 
 ```bash
@@ -36,6 +45,7 @@ python -m train experiment=synthetics/induction_head/rwkv
 To run the training,
 ```bash
 python -m train experiment=dfa/lstm
+python -m train experiment=dfa/retnet
 python -m train experiment=dfa/transformer+
 ```
 
@@ -45,6 +55,13 @@ To run the generation,
 python -m generate experiment=dfa/lstm train.ckpt="outputs/2023-09-18/08-23-56-668022/seq-icl-data/mbg9ohwc/checkpoints/epoch\=70-step\=11147.ckpt" hydra.run.dir="./"
 ```
 Note to escape the `=` in the checkpoint path.
+
+To do hyperparamter sweep,
+
+```bash
+python -m sweep
+```
+The model family can be specified in `sweep.py`.
 
 ## Notes
 
