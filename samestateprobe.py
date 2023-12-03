@@ -27,7 +27,6 @@ def read_hidden_states(folder):
     # sort files with ids
     files = [file for _, file in sorted(zip(ids, files))]
     hidden_states = []
-    attentions = []
     dfas = []
     char_labels = []
     probs = []
@@ -36,28 +35,21 @@ def read_hidden_states(folder):
         with open(file, "rb") as f:
             data = pickle.load(f)
             hidden_states.append(data["hidden_outputs"])
-            attentions.append(data["attention_scores"])
             dfas += data["dfas"]
             char_labels += data["char_labels"]
             probs.append(data["probs"])
             if vocab is None:
                 vocab = data["vocab"]
+
     probs = np.concatenate(probs, axis=0)
+
     data = []
-    attention_data = []
     for layer in range(len(hidden_states[0])):
         # concat all hidden states
         layer_states = [state[layer] for state in hidden_states]
         layer_states = np.concatenate(layer_states, axis=0)
         data.append(layer_states)
-    if attentions[0] is not None:
-        for layer in range(len(attentions[0])):
-            # concat all hidden states
-            layer_states = [state[layer] for state in attentions]
-            layer_states = np.concatenate(layer_states, axis=0)
-            attention_data.append(layer_states)
-
-    return data, dfas, char_labels, probs, vocab, attention_data
+    return data, dfas, char_labels, probs, vocab
 
 
 def get_dfa_states(input, dfa, in_states=False):
@@ -95,7 +87,7 @@ def get_results(file):
         ],
     )
     pkl_folder = file.replace(".txt", "_batch")
-    hidden_states, dfas, char_labels, probs, vocab, attentions = read_hidden_states(pkl_folder)
+    hidden_states, dfas, char_labels, probs, vocab = read_hidden_states(pkl_folder)
     df["dfa"] = dfas
     df["char_labels"] = char_labels
     data = []
@@ -111,8 +103,6 @@ def get_results(file):
         datum["states"] = get_dfa_states(datum["input"], datum["dfa"], in_states=False)
         if hidden_states is not None:
             datum["hidden_outputs"] = [states[index] for states in hidden_states]
-        if attentions is not None:
-            datum["attention_scores"] = [states[index] for states in attentions]
         assert len(datum["input"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["input"]), datum["hidden_outputs"][0].shape[0])
         assert len(datum["states"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["states"]), datum["hidden_outputs"][0].shape[0])
         data.append(datum)
@@ -124,25 +114,15 @@ class ProbeModel(nn.Module):
     def __init__(self, nhid, dropout=0.1, bigram=False):
         super(ProbeModel, self).__init__()
         self.dropout = nn.Dropout(dropout)
-        self.bigram = bigram
+        self.project1 = nn.Linear(nhid, nhid)
 
-        if self.bigram:
-            self.embedding = nn.Embedding(20, nhid // 2)
-            self.project = nn.Linear(nhid,  nhid )
-            self.fc1 = nn.Linear(3 * nhid , nhid)
-        else:
-            self.embedding = nn.Embedding(20, nhid)
-            self.project = nn.Linear(nhid, nhid)
-            self.fc1 = nn.Linear(3 * nhid, nhid)
+        self.fc1 = nn.Linear(3 * nhid, nhid)
+        self.fc2 = nn.Linear(nhid, 2, bias=False)
 
-        self.fc2 = nn.Linear(nhid, 1, bias=False)
-
-    def forward(self, hiddens, chars):
-        char_embeds = self.embedding(chars)
-        if char_embeds.dim() == 3:
-            char_embeds = char_embeds.reshape(char_embeds.shape[0], -1)
-        hidden_embeds = self.project(self.dropout(hiddens))
-        x = torch.cat((char_embeds, hidden_embeds, char_embeds * hidden_embeds), dim=1)
+    def forward(self, hiddens1, hiddens2):
+        hiddens1 = self.project1(self.dropout(hiddens1))
+        hiddens2 = self.project1(self.dropout(hiddens2))
+        x = torch.cat((hiddens1, hiddens2, hiddens1 * hiddens2), dim=1)
         x = self.fc1(x)
         x = torch.tanh(x)
         x = self.fc2(x)
@@ -157,7 +137,6 @@ class StateProbeDataset(Dataset):
         self.vocab = vocab
         self.use_ratio = use_ratio
         self.bigram = bigram
-        self.unigram = False
         assert len(self.hiddens) == len(self.states)
         assert len(self.hiddens) == len(self.chars)
 
@@ -166,102 +145,36 @@ class StateProbeDataset(Dataset):
 
     def __getitem__(self, index):
         state_info = self.states[index]
-        char_info = ""
-        while len(char_info) < 2:
-            time_step = np.random.choice(list(range(75, len(state_info))))
-            char_info = self.chars[index][:time_step + 1]
 
-        state = state_info[time_step]
-        hidden = torch.tensor(self.hiddens[index][time_step])
-
-        if self.bigram:
-            # sample an existing bigram
-            # t = np.random.choice(list(range(1, len(char_info))))
-            char1 = char_info[-1]
-            bigram_points = []
-            for t in range(len(char_info) - 1):
-                if char_info[t] == char1:
-                    bigram_points.append(t)
-
-            if np.random.rand() > 0.5:
-                if len(bigram_points) > 0:
-                    t = np.random.choice(bigram_points)
-                    char2 = char_info[t + 1]
-                    count = 1
-                else:
-                    char2 = np.random.choice(char_info)
-                    count = 0
-            else:
-                char2s = set([char_info[t+1] for t in bigram_points])
-                non_char2s = set(char_info).difference(char2s)
-                if len(non_char2s) > 0:
-                    char2 = np.random.choice(list(non_char2s))
-                    count = 0
-                else:
-                    char2 = np.random.choice(list(char2s))
-                    count = 1
-
-            # count =   # to prevent zero division error
-            tlen = 1
-            char1 = self.vocab.index(char1)
-            char2 = self.vocab.index(char2)
-            # char3 = self.vocab.index(char3)
-            char = [char1, char2]
-        elif self.unigram:
-            # sample a bigram
-            char = char_info[-1]
-            count = char_info.count(char)
-            char = self.vocab.index(char)
-            tlen = len(char_info)
+        if np.random.rand() < 0.5:
+            time_step1 = 0
+            time_step2 = 0
+            time_step1, time_step2 = np.random.choice(list(range(1, len(state_info))), 2)
+            state1 = state_info[time_step1]
+            state2 = state_info[time_step2]
+            label = state1 == state2
         else:
-            # sample an existing bigram
-            # t = np.random.choice(list(range(1, len(char_info))))
-            char2 = char_info[-1]
-            char1 = char_info[-2]
+            # sample same states
+            state = np.random.choice(list(set(state_info) - {-1}))
+            # find timesteps that matches the sate
+            time_steps = np.where(state_info == state)[0]
+            # sample two random time steps
+            time_step1, time_step2 = np.random.choice(time_steps, size=2, replace=True)
+            state1 = state_info[time_step1]
+            state2 = state_info[time_step2]
+            label = state1 == state2
 
-            trigram_points = []
-            for t in range(len(char_info) - 2):
-                if char_info[t] == char1 and char_info[t + 1] == char2:
-                    trigram_points.append(t)
+        hidden1 = self.hiddens[index][time_step1]
+        hidden2 = self.hiddens[index][time_step2]
 
-            if np.random.rand() > 0.5:
-                if len(trigram_points) > 0:
-                    t = np.random.choice(trigram_points)
-                    char3 = char_info[t + 2]
-                    count = 1
-                else:
-                    char3 = np.random.choice(char_info)
-                    count = 0
-            else:
-                char3s = set([char_info[t+2] for t in trigram_points])
-                non_char3s = set(char_info).difference(char3s)
-                if len(non_char3s) > 0:
-                    char3 = np.random.choice(list(non_char3s))
-                    count = 0
-                else:
-                    char3 = np.random.choice(list(char3s))
-                    count = 1
-
-            # count =   # to prevent zero division error
-            tlen = 1
-            char1 = self.vocab.index(char1)
-            char2 = self.vocab.index(char2)
-            char3 = self.vocab.index(char3)
-            char = [char1, char2, char3]
-
-
-
-        # hidden[:] = 0
-        # hidden[0] = ratio
-        return hidden, char, count, tlen
+        return torch.tensor(hidden1), torch.tensor(hidden2), int(label)
 
     def collate_fn(self, batch):
-        hiddens, chars, counts, totals = zip(*batch)
-        hiddens = torch.stack(hiddens, dim=0)
-        chars = torch.LongTensor(chars)
-        counts = torch.tensor(counts).float()
-        totals = torch.tensor(totals).float()
-        return hiddens, chars, counts, totals
+        hiddens1, hiddens2, label = zip(*batch)
+        hiddens1 = torch.stack(hiddens1, dim=0)
+        hiddens2 = torch.stack(hiddens2, dim=0)
+        labels = torch.tensor(label, dtype=torch.long)
+        return hiddens1, hiddens2, labels
 
 def train(args, hiddens, states, chars, vocab):
     # init Transformer Encoder with causal masking
@@ -289,16 +202,10 @@ def train(args, hiddens, states, chars, vocab):
     model.train()
 
     for e in range(args.n_epochs):
-        for hidden, char, count, total_count in train_loader:
+        for hiddens1, hiddens2, labels in train_loader:
             optimizer.zero_grad()
-            logits = model(hidden.cuda(), char.cuda())
-            if args.use_ratio:
-                target = count / total_count
-            else:
-                target = count
-            # target += 1e-6
-            # loss = F.mse_loss(logits[:, 0], target.cuda())
-            loss = F.binary_cross_entropy_with_logits(logits[:, 0], target.cuda())
+            logits = model(hiddens1.cuda(), hiddens2.cuda())
+            loss = F.cross_entropy(logits, labels.cuda())
             loss.backward()
             # clip gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -308,31 +215,22 @@ def train(args, hiddens, states, chars, vocab):
 
         # validation
         total = 0.0
-        val_loss = 0.0
+        val_corrects = 0.0
         model.eval()
-        for hidden, char, count, total_count in val_loader:
-            logits = model(hidden.cuda(), char.cuda())
-            if args.use_ratio:
-                target = count / total_count
-            else:
-                target = count
-
-            # target += 1e-6
-            target = target.cuda()
-
-            # errors = torch.abs((logits[:, 0] - target)) # / target
-            errors = F.binary_cross_entropy_with_logits(logits[:, 0], target, reduction="none")
-            total += hidden.shape[0]
-            val_loss += errors.sum().item()
-
-        val_loss /= total
+        for hiddens1, hiddens2, labels in val_loader:
+            logits = model(hiddens1.cuda(), hiddens2.cuda())
+            preds = torch.argmax(logits, dim=1)
+            corrects = preds == labels.cuda()
+            total += hiddens1.shape[0]
+            val_corrects += corrects.sum().item()
+        val_corrects /= total
         if args.use_wandb:
-            wandb.log({"val_loss": val_loss})
+            wandb.log({"val_acc": val_corrects})
         else:
-            print("val loss:", val_loss)
+            print("val acc:", val_corrects)
         model.train()
 
-    wandb.log({"val_loss_final": val_loss})
+    wandb.log({"val_acc_final": val_corrects})
     return model, optimizer
 
 def run(args, results):
@@ -362,7 +260,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.use_wandb:
         import wandb
-        wandb.init(project="bigram_classification", config=args)
+        wandb.init(project="dfa_ss_probe", config=args)
         wandb.config.update(args)
 
     exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
@@ -376,8 +274,7 @@ if __name__ == "__main__":
                    'hyena/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-614857',
                    'lstm/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-00-28-036885',
                    'transformer/12': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-222033',
-                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063',
-                   'lstm/3': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-28/11-12-43-061481'}
+                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063'}
 
     results = get_results(exp_folders[args.exp] + "/generations/200_val.txt")
     model, optimizer = run(args, results)

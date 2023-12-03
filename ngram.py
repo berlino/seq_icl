@@ -6,10 +6,11 @@ import torch
 
 def update_ngram_probs_(text: str, counters: Mapping[int, Counter]):
     # give a string, update the ngram counts of characters
+    L = len(text)
     for n in counters.keys():
         counter = counters[n]
-        for i in range(len(text)):
-            if i + n <= len(text):
+        for i in range(L):
+            if i + n <= L:
                 word = text[i : i + n]
                 counter[word] += 1
 
@@ -96,12 +97,6 @@ def get_next_char_prob(
                 else:
                     non_exist_chars.append(_char)
             beta = 1.0 - sum_prob
-            # print(beta)
-            # if beta != 1.0:
-            #     try:
-            #         assert np.abs(1 - (counts.get(n - 1, None)[prefix] - 1) / counts.get(n - 1, None)[prefix] - beta) < 1e-5
-            #     except:
-            #         breakpoint()
             assert beta > 0.0
 
             non_exist_probs, non_exist_ns = get_next_char_prob(

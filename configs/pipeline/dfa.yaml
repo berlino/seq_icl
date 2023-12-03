@@ -11,8 +11,8 @@ dataset:
   vocab_size: 20
 
 train:
-  monitor: val/accuracy_ignore_index
-  mode: max
+  monitor: val/loss
+  mode: min
 
 task:
   _name_: dfalm

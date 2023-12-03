@@ -23,7 +23,7 @@ def create_flags(options):
         flags += f"{key}={value} "
         if istransformer and "model.n_layer" in key:
             attn_layer_idx = str(list(range(value)))
-            flags += f"model.attn_layer_idx=\"{attn_layer_idx}\" "
+            flags += f'model.attn_layer_idx="{attn_layer_idx}" '
     return flags.strip()
 
 
@@ -54,13 +54,16 @@ def is_free(gpu_id):
 
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
-    config = get_config("sweeps/hyper.yaml")
-    sweeps = get_sweep(get_config("sweeps/hyper.yaml"))
-    sweep_folder = "hyper/lineartf/"
-    os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 129 + 201 + 10001
 
-    gpus = {id: None for id in [2, 3, 4, 5, 6, 7, 13, 14, 15]}
+    model_family = "h3"
+
+    config = get_config(f"sweeps/hyper_{model_family}.yaml")
+    sweeps = get_sweep(get_config(f"sweeps/hyper_{model_family}.yaml"))
+    sweep_folder = f"hyper/experiments/{model_family}/"
+    os.makedirs(sweep_folder, exist_ok=True)
+    hash_offset = 2
+
+    gpus = {id: None for id in [1,2,3,4,5,6,7,8]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -76,8 +79,15 @@ if __name__ == "__main__":
                         sweep_hash = hash(sweep) + hash_offset
                         gpus[gpu_id] = sweep_hash
                         command = (
-                            f"export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES={gpu_id}; python -c "
-                            f'"import pykeops; pykeops.clean_pykeops();"; python train.py wandb.project="large_transformer" {sweep} 1> {sweep_folder}/{sweep_hash}.log 2> {sweep_folder}/{sweep_hash}.err; touch {sweep_folder}/{sweep_hash}.done'
+                            "export PYTHONHASHSEED=0; export"
+                            f' CUDA_VISIBLE_DEVICES={gpu_id}; python -c "import'
+                            ' pykeops; pykeops.clean_pykeops();"; python train.py'
+                            f' wandb.project="dfa_learning_curves" hydra.run.dir="./experiments/{model_family}/'
+                            '\${now:%Y-%m-%d}/\${now:%H-%M-%S-%f}"'
+                            f' {sweep} 1>'
+                            f" {sweep_folder}/{sweep_hash}.log 2>"
+                            f" {sweep_folder}/{sweep_hash}.err; touch"
+                            f" {sweep_folder}/{sweep_hash}.done"
                         )
                         print(command)
                         proc = Popen(

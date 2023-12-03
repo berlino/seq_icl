@@ -228,6 +228,9 @@ class SequenceLightningModule(pl.LightningModule):
         self.val_torchmetrics = self.task.val_torchmetrics
         self.test_torchmetrics = self.task.test_torchmetrics
 
+        self.final_val_torchmetrics = self.task.final_val_torchmetrics
+        self.final_test_torchmetrics = self.task.final_test_torchmetrics
+
         os.makedirs("samples", exist_ok=True)
 
         if "dfa" in self.hparams["dataset"]["_name_"]:
@@ -245,11 +248,11 @@ class SequenceLightningModule(pl.LightningModule):
 
             tokenizer = dataset.tokenizer
 
-            with open(f"samples/train.txt", "w") as f:
-                for index in range(len(dataset)):
-                    data = dataset[index]
-                    x, y, dfa = data
-                    print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
+            # with open(f"samples/train.txt", "w") as f:
+            #     for index in range(len(dataset)):
+            #         data = dataset[index]
+            #         x, y, dfa = data
+            #         print("".join(tokenizer.decode(x)).replace(".", ""), file=f)
 
     def load_state_dict(self, state_dict, strict=True):
         if self.hparams.train.pretrained_model_state_hook["_name_"] is not None:
@@ -429,7 +432,7 @@ class SequenceLightningModule(pl.LightningModule):
         preds = x.argmax(axis=-1)
         os.makedirs("generations", exist_ok=True)
         os.makedirs(f"generations/{self.current_epoch}_{prefix}_batch", exist_ok=True)
-        print(os.getcwd())
+        # print(os.getcwd())
         attention_scores = None
         if hidden_outputs is not None:
             # check if hidden_outputs is a tuple
@@ -552,11 +555,15 @@ class SequenceLightningModule(pl.LightningModule):
         )
 
     def _shared_step(self, batch, batch_idx, prefix="train"):
+        metric_prefix = prefix.replace("final/", "final_")
+
         prefix = prefix.replace("final/", "")
-        if (self.current_epoch == 200 or self.current_epoch == 201) and (prefix == "test" or prefix == "val"):
+        if ("final" in  metric_prefix) and (prefix == "test" or prefix == "val"):
             return_hidden_outputs = True
         else:
             return_hidden_outputs = False
+
+        return_hidden_outputs = False
 
         self._process_state(batch, batch_idx, train=(prefix == "train"))
         x, y, w = self.forward(batch, return_hidden_outputs=return_hidden_outputs)
@@ -566,7 +573,7 @@ class SequenceLightningModule(pl.LightningModule):
             # write to a file
             hidden_outputs = w["hidden_outputs"] if return_hidden_outputs else None
 
-            if self.current_epoch % 50 == 0 or return_hidden_outputs:
+            if ("final" in metric_prefix) or return_hidden_outputs:
                 model_ngram_diff, model_dfa_diff, dfa_ngram_diff, n_gram_loss, n_gram_dfa_acc = self._writes_to_file(
                     prefix, x, y, batch, w["dfas"],
                     ngram=3,
@@ -590,18 +597,14 @@ class SequenceLightningModule(pl.LightningModule):
         metrics["loss"] = loss
         if prefix != "train" and "dfas" in w:
             metrics["dfa_accuracy"] = dfa_accuracy
-            if self.current_epoch % 50 == 0 or return_hidden_outputs:
+            if ("final" in metric_prefix) or return_hidden_outputs:
                 metrics["model_ngram_diff"] = model_ngram_diff
                 metrics["model_dfa_diff"] = model_dfa_diff
                 metrics["dfa_ngram_diff"] = dfa_ngram_diff
                 metrics["n_gram_loss"] = n_gram_loss
                 metrics["n_gram_dfa_acc"] = n_gram_dfa_acc
 
-        metrics = {f"{prefix}/{k}": v for k, v in metrics.items()}
-
-        # Calculate torchmetrics
-        torchmetrics = getattr(self, f"{prefix}_torchmetrics")
-        torchmetrics(x, y, loss=loss)
+        metrics = {f"{metric_prefix}/{k}": v for k, v in metrics.items()}
 
         log_on_step = (
             "eval" in self.hparams
@@ -617,6 +620,9 @@ class SequenceLightningModule(pl.LightningModule):
             add_dataloader_idx=False,
             sync_dist=True,
         )
+        #  Calculate torchmetrics
+        torchmetrics = getattr(self, f"{metric_prefix}_torchmetrics")
+        torchmetrics(x, y, loss=loss)
 
         # log the whole dict, otherwise lightning takes the mean to reduce it
         # https://pytorch-lightning.readthedocs.io/en/stable/visualize/logging_advanced.html#enable-metrics-for-distributed-training
@@ -943,11 +949,12 @@ def train(config):
         trainer.validate(model)
 
     if config.train.ckpt is not None:
-        trainer.fit(model, ckpt_path=config.train.ckpt)
+        # trainer.fit(model, ckpt_path=config.train.ckpt)
+        pass
     else:
         trainer.fit(model)
     if config.train.test:
-        trainer.test(model)
+        trainer.test(model, ckpt_path="best")
 
 
 @hydra.main(config_path="configs", config_name="config.yaml")
