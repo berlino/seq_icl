@@ -11,7 +11,7 @@ parameters:
     values: [1000]
   model.d_model:
     values: [128, 512, 1024]
-  model.attn_cfg.num_heads:
+  model.attn_cfg.n_heads:
     values: [1, 2]
   model.n_layer:
     values: [2, 4, 8]

@@ -65,14 +65,6 @@ class MultiScaleRetention(nn.Module):
 
         self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(device=device, dtype=dtype)
 
-    def post_init(self):
-        nn.init.xavier_uniform_(self.q_proj.weight, gain=2 ** -2.5)
-        nn.init.xavier_uniform_(self.k_proj.weight, gain=2 ** -2.5)
-        nn.init.xavier_uniform_(self.v_proj.weight, gain=2 ** -2.5)
-        nn.init.xavier_uniform_(self.g_proj.weight, gain=2 ** -2.5)
-        nn.init.xavier_uniform_(self.out_proj.weight)
-        nn.init.constant_(self.out_proj.bias, 0.0)
-
     def parallel_forward(self, qr, kr, v, mask):
         bsz, tgt_len, embed_dim = v.size()
         vr = v.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -85,87 +77,7 @@ class MultiScaleRetention(nn.Module):
         output = output.transpose(1, 2)
         return output
 
-    def recurrent_forward(
-        self,
-        qr, kr, v,
-        decay,
-        incremental_state
-    ):
-        bsz = v.size(0)
-
-        v = v.view(bsz, self.num_heads, self.head_dim, 1)
-        kv = kr * v
-        if "prev_key_value" in incremental_state:
-            prev_kv = incremental_state["prev_key_value"]
-            prev_scale = incremental_state["scale"]
-            scale = prev_scale * decay + 1
-            kv = prev_kv * (1 - 1 / scale).view(self.num_heads, 1, 1) + kv / scale.view(self.num_heads, 1, 1)
-            # kv = prev_kv * decay.view(self.num_heads, 1, 1) + kv
-        else:
-            scale = torch.ones_like(decay)
-
-        incremental_state["prev_key_value"] = kv
-        incremental_state["scale"] = scale
-
-        output = torch.sum(qr * kv, dim=3)
-        return output
-
-    def chunk_recurrent_forward(
-        self,
-        qr, kr, v,
-        inner_mask
-    ):
-        mask, cross_decay, inner_decay = inner_mask
-        bsz, tgt_len, embed_dim = v.size()
-        chunk_len = mask.size(1)
-        num_chunks = tgt_len // chunk_len
-
-        assert tgt_len % chunk_len == 0
-
-        qr = qr.view(bsz, self.num_heads, num_chunks, chunk_len, self.key_dim).transpose(1, 2)
-        kr = kr.view(bsz, self.num_heads, num_chunks, chunk_len, self.key_dim).transpose(1, 2)
-        v = v.view(bsz, num_chunks, chunk_len, self.num_heads, self.head_dim).transpose(2, 3)
-
-        kr_t = kr.transpose(-1, -2)
-
-        qk_mat = qr @ kr_t # bsz * num_heads * chunk_len * chunk_len
-        qk_mat = qk_mat * mask
-        inner_scale = qk_mat.detach().abs().sum(dim=-1, keepdim=True).clamp(min=1)
-        qk_mat = qk_mat / inner_scale
-        inner_output = torch.matmul(qk_mat, v) # bsz * num_heads * num_value_heads * chunk_len * head_dim
-
-        # reduce kv in one chunk
-        kv = kr_t @ (v * mask[:, -1, :, None])
-        kv = kv.view(bsz, num_chunks, self.num_heads, self.key_dim, self.head_dim)
-
-        kv_recurrent = []
-        cross_scale = []
-        kv_state = torch.zeros(bsz, self.num_heads, self.key_dim, self.head_dim).to(v)
-        kv_scale = torch.ones(bsz, self.num_heads, 1, self.head_dim).to(v)
-
-        # accumulate kv by loop
-        for i in range(num_chunks):
-            kv_recurrent.append(kv_state / kv_scale)
-            cross_scale.append(kv_scale)
-            kv_state = kv_state * cross_decay + kv[:, i]
-            kv_scale = kv_state.detach().abs().sum(dim=-2, keepdim=True).clamp(min=1)
-
-        kv_recurrent = torch.stack(kv_recurrent, dim=1)
-        cross_scale = torch.stack(cross_scale, dim=1)
-
-        cross_output = (qr * inner_decay) @ kv_recurrent
-        output = inner_output / cross_scale + cross_output / inner_scale
-
-        output = output.transpose(2, 3)
-        return output
-
-    def forward(
-        self,
-        x,
-        incremental_state=None,
-        chunkwise_recurrent=False,
-        return_attention=False,
-    ):
+def forward(self, x, return_attention=False):
         bsz, tgt_len, _ = x.size()
         (sin, cos), inner_mask = self.xpos(tgt_len)
 
@@ -181,12 +93,7 @@ class MultiScaleRetention(nn.Module):
         qr = theta_shift(q, sin, cos)
         kr = theta_shift(k, sin, cos)
 
-        if incremental_state is not None:
-            output = self.recurrent_forward(qr, kr, v, inner_mask, incremental_state)
-        elif chunkwise_recurrent:
-            output = self.chunk_recurrent_forward(qr, kr, v, inner_mask)
-        else:
-            output = self.parallel_forward(qr, kr, v, inner_mask)
+        output = self.parallel_forward(qr, kr, v, inner_mask)
 
         output = self.group_norm(output).reshape(bsz, tgt_len, self.head_dim * self.num_heads)
         output = self.gate_fn(g) * output

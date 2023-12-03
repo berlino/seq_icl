@@ -65,6 +65,8 @@ The model family can be specified in `sweep.py`.
 
 ## Notes
 
+* The MHA in simple\_lm.py use `num_heads`, but in other modules we use `n_heads`. The name needs to be changed for consistency, but they're kept as is for now.
+
 ### References of Linear RNNs
 
 * [GILR](https://arxiv.org/abs/1709.04057)
