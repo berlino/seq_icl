@@ -12,6 +12,7 @@ from collections import Counter
 from src.dataloaders.base import SequenceDataset
 from pythomata import SimpleDFA
 
+
 class DFA:
     """Represents a DFA"""
 
@@ -25,11 +26,11 @@ class DFA:
         assert len(transitions) == num_nodes
         transitions = {i: v for i, v in enumerate(transitions)}
         dfa = SimpleDFA(
-            states = set(list(range(num_nodes))),
-            alphabet = set(alphabet),
-            initial_state = 0,
-            accepting_states = set(list(range(num_nodes))),
-            transition_function = transitions
+            states=set(list(range(num_nodes))),
+            alphabet=set(alphabet),
+            initial_state=0,
+            accepting_states=set(list(range(num_nodes))),
+            transition_function=transitions,
         )
         self.dfa = dfa
         self.rng = rng
@@ -40,7 +41,9 @@ class DFA:
         for node in nodes:
             node_transitions = self.dfa._transition_function[node]
             # sort node transitions by outgoing state
-            transitions.append(tuple(sorted(node_transitions.items(), key=lambda item: item[1])))
+            transitions.append(
+                tuple(sorted(node_transitions.items(), key=lambda item: item[1]))
+            )
         return tuple(transitions)
 
     def _minimize(self):
@@ -56,7 +59,6 @@ class DFA:
     def __hash__(self):
         # Here I assume the initial state is always the smallest node
         return hash(self._sorted_transitions())
-
 
     def __call__(self, word: str):
         current_node = self.dfa._initial_state
@@ -133,7 +135,9 @@ class RandomDFASampler:
             )
             # exclude self loops
             possible_nodes = [n for n in range(self.num_nodes) if n != node]
-            transition_nodes = self.rng.choice(possible_nodes, size=num_transitions, replace=False)
+            transition_nodes = self.rng.choice(
+                possible_nodes, size=num_transitions, replace=False
+            )
             transitions[node] = dict(zip(transition_symbols, transition_nodes))
         dfa_rng = np.random.default_rng(self.rng.integers(0, 2**32))
         return DFA(self.num_nodes, self.alphabet, tuple(transitions), dfa_rng)
@@ -160,9 +164,7 @@ class Vocab:
         self.special_vocabs = special_vocabs
         vocab = [chr(v + 97) for v in list(range(vocab_size))]
         self.non_special_vocab = sorted(list(vocab))
-        self.vocab = sorted(
-            list(set(vocab + list(self.special_vocabs.values())))
-        )
+        self.vocab = sorted(list(set(vocab + list(self.special_vocabs.values()))))
         self.v2id = {v: i for i, v in enumerate(self.vocab)}
         self.vocab_size = len(self.vocab)
 
@@ -296,7 +298,9 @@ class ICLDFADataModule(SequenceDataset):
 
         DFAs = set([])
         for _ in range(self.num_examples * 10):
-            num_nodes = self.rng.integers(self.max_outgoing_edges, self.max_num_nodes + 1)
+            num_nodes = self.rng.integers(
+                self.max_outgoing_edges, self.max_num_nodes + 1
+            )
             num_alphabet = self.rng.integers(
                 self.max_outgoing_edges, self.vocab_size - 2 + 1
             )
@@ -333,9 +337,19 @@ class ICLDFADataModule(SequenceDataset):
                 f" {self.num_test_examples}"
             )
 
-        DFAs = {"train": DFAs[: self.num_examples], "test": DFAs[self.num_examples :]}
+        DFAs = {
+            "train": DFAs[: self.num_examples],
+            "test": DFAs[
+                self.num_examples : self.num_examples + self.num_test_examples // 2
+            ],
+            "val": DFAs[
+                self.num_examples
+                + self.num_test_examples // 2 : self.num_examples
+                + self.num_test_examples
+            ],
+        }
 
-        examples = {"train": [], "test": []}
+        examples = {"train": [], "test": [], "val": []}
 
         for split, dfas in DFAs.items():
             split_examples = []
@@ -362,7 +376,7 @@ class ICLDFADataModule(SequenceDataset):
                 padding_value=-100,
             )
 
-            example_outputs[example_outputs == self.vocab.get_id('|')] = -100
+            example_outputs[example_outputs == self.vocab.get_id("|")] = -100
 
             examples[split] = (example_inputs, example_outputs)
 
@@ -372,6 +386,9 @@ class ICLDFADataModule(SequenceDataset):
             ),
             "test": SimpleDataset(
                 examples=examples["test"], dfas=DFAs["test"], tokenizer=self.tokenizer
+            ),
+            "val": SimpleDataset(
+                examples=examples["val"], dfas=DFAs["val"], tokenizer=self.tokenizer
             ),
         }
 
@@ -385,7 +402,7 @@ class ICLDFADataModule(SequenceDataset):
         return self._data_loader(self.dataset["train"], shuffle=True)
 
     def val_dataloader(self, *args, **kwargs):
-        return self._data_loader(self.dataset["test"], shuffle=False)
+        return self._data_loader(self.dataset["val"], shuffle=False)
 
     def test_dataloader(self, *args, **kwargs):
         return self._data_loader(self.dataset["test"], shuffle=False)

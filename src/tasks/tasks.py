@@ -55,6 +55,9 @@ class BaseTask:
         self.val_torchmetrics = torchmetrics.clone(prefix='val/')
         self.test_torchmetrics = torchmetrics.clone(prefix='test/')
 
+        self.final_val_torchmetrics = torchmetrics.clone(prefix='final_val/')
+        self.final_test_torchmetrics = torchmetrics.clone(prefix='final_test/')
+
     def _init_torchmetrics(self):
         """
         Instantiate torchmetrics.
