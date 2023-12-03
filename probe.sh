@@ -16,17 +16,21 @@
 # export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES=14; python probe.py --layer 6 --use_wandb   > exps/probe/l6c 2> exps/probe/l6c.err &
 # export PYTHONHASHSEED=0; export CUDA_VISIBLE_DEVICES=15; python probe.py --layer 7 --use_wandb   > exps/probe/l7c 2> exps/probe/l7c.err &
 
-counter=0
-for exp_name in "transformer/8" "transformer/2" "transformer/4" "transformer/1" "linear_transformer/4" "retnet/4" "rwkv/2" "h3/2" "hyena/2" "transformer/12" "linear_transformer/8"; do
+counter=4
+# for exp_name in "transformer/8" "transformer/2" "transformer/4" "transformer/1" "linear_transformer/4" "retnet/4" "rwkv/2" "h3/2" "hyena/2" "transformer/12" "linear_transformer/8"; do
+for exp_name in "transformer/8"; do
     mkdir -p newexps/${exp_name}
+    # export PYTHONHASHSEED=0
+    # export CUDA_VISIBLE_DEVICES=${counter}
+    # python probe.py --layer 0 --use_wandb --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl1.log &
     export PYTHONHASHSEED=0
     export CUDA_VISIBLE_DEVICES=${counter}
-    python probe.py --layer 1 --use_wandb --use_ratio --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl1.log &
+    python probe.py --layer 2 --use_wandb --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl2.log &
     export PYTHONHASHSEED=0
     export CUDA_VISIBLE_DEVICES=${counter}
-    python probe.py --layer 2 --use_wandb --use_ratio --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl2.log &
+    python probe.py --layer 3 --use_wandb --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl3.log &
     export PYTHONHASHSEED=0
     export CUDA_VISIBLE_DEVICES=${counter}
-    python probe.py --layer 3 --use_wandb --use_ratio --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl3.log &
+    python probe.py --layer 5 --use_wandb --bigram --exp="${exp_name}" &>newexps/${exp_name}/rl4.log &
     counter=$((counter + 1))
 done

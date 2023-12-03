@@ -42,7 +42,6 @@ def read_hidden_states(folder):
             probs.append(data["probs"])
             if vocab is None:
                 vocab = data["vocab"]
-
     probs = np.concatenate(probs, axis=0)
     data = []
     attention_data = []
@@ -51,11 +50,12 @@ def read_hidden_states(folder):
         layer_states = [state[layer] for state in hidden_states]
         layer_states = np.concatenate(layer_states, axis=0)
         data.append(layer_states)
-    for layer in range(len(attentions[0])):
-        # concat all hidden states
-        layer_states = [state[layer] for state in attentions]
-        layer_states = np.concatenate(layer_states, axis=0)
-        attention_data.append(layer_states)
+    if attentions[0] is not None:
+        for layer in range(len(attentions[0])):
+            # concat all hidden states
+            layer_states = [state[layer] for state in attentions]
+            layer_states = np.concatenate(layer_states, axis=0)
+            attention_data.append(layer_states)
 
     return data, dfas, char_labels, probs, vocab, attention_data
 
@@ -128,8 +128,8 @@ class ProbeModel(nn.Module):
 
         if self.bigram:
             self.embedding = nn.Embedding(20, nhid // 2)
-            self.project = nn.Linear(nhid, nhid)
-            self.fc1 = nn.Linear(3 * nhid, nhid)
+            self.project = nn.Linear(nhid,  nhid )
+            self.fc1 = nn.Linear(3 * nhid , nhid)
         else:
             self.embedding = nn.Embedding(20, nhid)
             self.project = nn.Linear(nhid, nhid)
@@ -157,6 +157,7 @@ class StateProbeDataset(Dataset):
         self.vocab = vocab
         self.use_ratio = use_ratio
         self.bigram = bigram
+        self.unigram = False
         assert len(self.hiddens) == len(self.states)
         assert len(self.hiddens) == len(self.chars)
 
@@ -167,7 +168,7 @@ class StateProbeDataset(Dataset):
         state_info = self.states[index]
         char_info = ""
         while len(char_info) < 2:
-            time_step = np.random.choice(list(range(1, len(state_info))))
+            time_step = np.random.choice(list(range(75, len(state_info))))
             char_info = self.chars[index][:time_step + 1]
 
         state = state_info[time_step]
@@ -176,24 +177,79 @@ class StateProbeDataset(Dataset):
         if self.bigram:
             # sample an existing bigram
             # t = np.random.choice(list(range(1, len(char_info))))
-            char1, char2 = char_info[-2], char_info[-1]
-            # count bigrams
-            count = 0
-            tlen = 0
-            for i in range(len(char_info) - 1):
-                if char_info[i] == char1 and char_info[i + 1] == char2:
-                    count += 1
-                if char_info[i] == char1:
-                    tlen += 1
+            char1 = char_info[-1]
+            bigram_points = []
+            for t in range(len(char_info) - 1):
+                if char_info[t] == char1:
+                    bigram_points.append(t)
+
+            if np.random.rand() > 0.5:
+                if len(bigram_points) > 0:
+                    t = np.random.choice(bigram_points)
+                    char2 = char_info[t + 1]
+                    count = 1
+                else:
+                    char2 = np.random.choice(char_info)
+                    count = 0
+            else:
+                char2s = set([char_info[t+1] for t in bigram_points])
+                non_char2s = set(char_info).difference(char2s)
+                if len(non_char2s) > 0:
+                    char2 = np.random.choice(list(non_char2s))
+                    count = 0
+                else:
+                    char2 = np.random.choice(list(char2s))
+                    count = 1
+
+            # count =   # to prevent zero division error
+            tlen = 1
             char1 = self.vocab.index(char1)
             char2 = self.vocab.index(char2)
+            # char3 = self.vocab.index(char3)
             char = [char1, char2]
-        else:
+        elif self.unigram:
             # sample a bigram
             char = char_info[-1]
             count = char_info.count(char)
             char = self.vocab.index(char)
             tlen = len(char_info)
+        else:
+            # sample an existing bigram
+            # t = np.random.choice(list(range(1, len(char_info))))
+            char2 = char_info[-1]
+            char1 = char_info[-2]
+
+            trigram_points = []
+            for t in range(len(char_info) - 2):
+                if char_info[t] == char1 and char_info[t + 1] == char2:
+                    trigram_points.append(t)
+
+            if np.random.rand() > 0.5:
+                if len(trigram_points) > 0:
+                    t = np.random.choice(trigram_points)
+                    char3 = char_info[t + 2]
+                    count = 1
+                else:
+                    char3 = np.random.choice(char_info)
+                    count = 0
+            else:
+                char3s = set([char_info[t+2] for t in trigram_points])
+                non_char3s = set(char_info).difference(char3s)
+                if len(non_char3s) > 0:
+                    char3 = np.random.choice(list(non_char3s))
+                    count = 0
+                else:
+                    char3 = np.random.choice(list(char3s))
+                    count = 1
+
+            # count =   # to prevent zero division error
+            tlen = 1
+            char1 = self.vocab.index(char1)
+            char2 = self.vocab.index(char2)
+            char3 = self.vocab.index(char3)
+            char = [char1, char2, char3]
+
+
 
         # hidden[:] = 0
         # hidden[0] = ratio
@@ -240,7 +296,9 @@ def train(args, hiddens, states, chars, vocab):
                 target = count / total_count
             else:
                 target = count
-            loss = F.mse_loss(logits[:, 0], target.cuda())
+            # target += 1e-6
+            # loss = F.mse_loss(logits[:, 0], target.cuda())
+            loss = F.binary_cross_entropy_with_logits(logits[:, 0], target.cuda())
             loss.backward()
             # clip gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -259,9 +317,11 @@ def train(args, hiddens, states, chars, vocab):
             else:
                 target = count
 
+            # target += 1e-6
             target = target.cuda()
 
-            errors = torch.abs((logits[:, 0] - target)) / target
+            # errors = torch.abs((logits[:, 0] - target)) # / target
+            errors = F.binary_cross_entropy_with_logits(logits[:, 0], target, reduction="none")
             total += hidden.shape[0]
             val_loss += errors.sum().item()
 
@@ -302,7 +362,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.use_wandb:
         import wandb
-        wandb.init(project="dfa_probe_new_bigram", config=args)
+        wandb.init(project="bigram_classification", config=args)
         wandb.config.update(args)
 
     exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
@@ -316,7 +376,8 @@ if __name__ == "__main__":
                    'hyena/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-614857',
                    'lstm/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-00-28-036885',
                    'transformer/12': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-222033',
-                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063'}
+                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063',
+                   'lstm/3': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-28/11-12-43-061481'}
 
     results = get_results(exp_folders[args.exp] + "/generations/200_val.txt")
     model, optimizer = run(args, results)
