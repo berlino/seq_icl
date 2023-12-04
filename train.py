@@ -435,10 +435,13 @@ class SequenceLightningModule(pl.LightningModule):
         os.makedirs(f"generations/{self.current_epoch}_{prefix}_batch", exist_ok=True)
         # print(os.getcwd())
         attention_scores = None
+        attention_contexts = None
         if hidden_outputs is not None:
             # check if hidden_outputs is a tuple
             if isinstance(hidden_outputs, tuple):
                 hidden_outputs, attention_scores = hidden_outputs
+                if attention_scores is not None:
+                    attention_context, attention_scores = attention_scores
 
             for i in range(200):
 
@@ -457,8 +460,13 @@ class SequenceLightningModule(pl.LightningModule):
                         saved_attention_scores = [
                             attention_score.cpu().numpy() for attention_score in attention_scores
                         ]
+                        saved_attention_contexts = [
+                            attention_context.cpu().numpy() for attention_context in attention_contexts
+                        ]
                     else:
                         saved_attention_scores = None
+
+
 
                     with open(path, "wb") as handle:
                         pickle.dump(
@@ -469,6 +477,7 @@ class SequenceLightningModule(pl.LightningModule):
                                 "vocab": self.task.dataset.vocab.vocab,
                                 "hidden_outputs": saved_hidden_outputs,
                                 "attention_scores": saved_attention_scores,
+                                "attention_contexts": saved_attention_contexts,
                             },
                             handle,
                         )

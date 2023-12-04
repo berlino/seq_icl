@@ -180,9 +180,9 @@ class MHA(nn.Module):
         if return_attention:
             context, attentions = context
             if self.return_residual:
-                x = (x, attentions)
+                x = (x, (context, attentions))
             else:
-                x = (attentions, )
+                x = ((context, attentions), )
 
         # context = self.group_norm(context)
 
@@ -492,7 +492,7 @@ class LMBackbone(nn.Module):
             if return_hidden_outputs:
                 hidden_outputs.append(hidden_states.detach().cpu())
                 if attention_outputs is not None and attentions is not None:
-                    attention_outputs.append(attentions.detach().cpu())
+                    attention_outputs.append((attentions[0].detach().cpu(), attentions[1].detach().cpu()))
 
         dropped = self.drop_f(hidden_states)
         residual = (dropped + residual) if residual is not None else dropped

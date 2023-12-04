@@ -28,6 +28,7 @@ def read_hidden_states(folder):
     files = [file for _, file in sorted(zip(ids, files))]
     hidden_states = []
     attentions = []
+    attention_contexts = []
     dfas = []
     char_labels = []
     probs = []
@@ -37,6 +38,7 @@ def read_hidden_states(folder):
             data = pickle.load(f)
             hidden_states.append(data["hidden_outputs"])
             attentions.append(data["attention_scores"])
+            attention_contexts.append(data["attention_contexts"])
             dfas += data["dfas"]
             char_labels += data["char_labels"]
             probs.append(data["probs"])
@@ -45,6 +47,7 @@ def read_hidden_states(folder):
     probs = np.concatenate(probs, axis=0)
     data = []
     attention_data = []
+    attention_context_data = []
     for layer in range(len(hidden_states[0])):
         # concat all hidden states
         layer_states = [state[layer] for state in hidden_states]
@@ -57,7 +60,14 @@ def read_hidden_states(folder):
             layer_states = np.concatenate(layer_states, axis=0)
             attention_data.append(layer_states)
 
-    return data, dfas, char_labels, probs, vocab, attention_data
+    if attention_contexts[0] is not None:
+        for layer in range(len(attention_contexts[0])):
+            # concat all hidden states
+            layer_states = [state[layer] for state in attention_contexts]
+            layer_states = np.concatenate(layer_states, axis=0)
+            attention_context_data.append(layer_states)
+
+    return data, dfas, char_labels, probs, vocab, attention_data, attention_context_data
 
 
 def get_dfa_states(input, dfa, in_states=False):
@@ -95,7 +105,7 @@ def get_results(file):
         ],
     )
     pkl_folder = file.replace(".txt", "_batch")
-    hidden_states, dfas, char_labels, probs, vocab, attentions = read_hidden_states(pkl_folder)
+    hidden_states, dfas, char_labels, probs, vocab, attentions, contexts = read_hidden_states(pkl_folder)
     df["dfa"] = dfas
     df["char_labels"] = char_labels
     data = []
@@ -113,6 +123,8 @@ def get_results(file):
             datum["hidden_outputs"] = [states[index] for states in hidden_states]
         if attentions is not None:
             datum["attention_scores"] = [states[index] for states in attentions]
+        if contexts is not None:
+            datum["attention_contexts"] = [states[index] for states in contexts]
         assert len(datum["input"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["input"]), datum["hidden_outputs"][0].shape[0])
         assert len(datum["states"]) <= datum["hidden_outputs"][0].shape[0], (len(datum["states"]), datum["hidden_outputs"][0].shape[0])
         data.append(datum)
@@ -121,12 +133,12 @@ def get_results(file):
 
 
 class ProbeModel(nn.Module):
-    def __init__(self, nhid, dropout=0.1, bigram=False):
+    def __init__(self, nhid, dropout=0.1, ngram=False):
         super(ProbeModel, self).__init__()
         self.dropout = nn.Dropout(dropout)
-        self.bigram = bigram
+        self.ngram = ngram
 
-        if self.bigram:
+        if self.ngram == 2:
             self.embedding = nn.Embedding(20, nhid // 2)
             self.project = nn.Linear(nhid,  nhid )
             self.fc1 = nn.Linear(3 * nhid , nhid)
@@ -150,14 +162,13 @@ class ProbeModel(nn.Module):
 
 
 class StateProbeDataset(Dataset):
-    def __init__(self, hiddens, states, chars, vocab, use_ratio=False, bigram=False):
+    def __init__(self, hiddens, states, chars, vocab, use_ratio=False, ngram=False):
         self.hiddens = hiddens
         self.states = states
         self.chars = chars
         self.vocab = vocab
         self.use_ratio = use_ratio
-        self.bigram = bigram
-        self.unigram = False
+        self.ngram = ngram
         assert len(self.hiddens) == len(self.states)
         assert len(self.hiddens) == len(self.chars)
 
@@ -174,7 +185,7 @@ class StateProbeDataset(Dataset):
         state = state_info[time_step]
         hidden = torch.tensor(self.hiddens[index][time_step])
 
-        if self.bigram:
+        if self.ngram == 2:
             # sample an existing bigram
             # t = np.random.choice(list(range(1, len(char_info))))
             char1 = char_info[-1]
@@ -196,18 +207,19 @@ class StateProbeDataset(Dataset):
                 non_char2s = set(char_info).difference(char2s)
                 if len(non_char2s) > 0:
                     char2 = np.random.choice(list(non_char2s))
-                    count = 0
+                    count = -1
                 else:
                     char2 = np.random.choice(list(char2s))
                     count = 1
 
             # count =   # to prevent zero division error
+            # count += 1
             tlen = 1
             char1 = self.vocab.index(char1)
             char2 = self.vocab.index(char2)
             # char3 = self.vocab.index(char3)
             char = [char1, char2]
-        elif self.unigram:
+        elif self.ngram == 1:
             # sample a bigram
             char = char_info[-1]
             count = char_info.count(char)
@@ -263,12 +275,12 @@ class StateProbeDataset(Dataset):
         totals = torch.tensor(totals).float()
         return hiddens, chars, counts, totals
 
-def train(args, hiddens, states, chars, vocab):
+def train(args, hiddens, states, chars, vocab, ngram: int = 1):
     # init Transformer Encoder with causal masking
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("device:", device)
     # model
-    dataset = StateProbeDataset(hiddens, states, chars, vocab, use_ratio=args.use_ratio, bigram=args.bigram)
+    dataset = StateProbeDataset(hiddens, states, chars, vocab, use_ratio=args.use_ratio, ngram=args.ngram)
     # split
     train_size = int(0.95 * len(dataset))
     train = torch.utils.data.Subset(dataset, list(range(train_size)))
@@ -280,7 +292,7 @@ def train(args, hiddens, states, chars, vocab):
         val, batch_size=args.batch_size, shuffle=False, collate_fn=dataset.collate_fn
     )
 
-    model = ProbeModel(nhid=128, bigram=args.bigram)
+    model = ProbeModel(nhid=128, ngram=args.ngram)
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -297,8 +309,8 @@ def train(args, hiddens, states, chars, vocab):
             else:
                 target = count
             # target += 1e-6
-            # loss = F.mse_loss(logits[:, 0], target.cuda())
-            loss = F.binary_cross_entropy_with_logits(logits[:, 0], target.cuda())
+            loss = F.mse_loss(logits[:, 0], target.cuda())
+            # loss = F.binary_cross_entropy_with_logits(logits[:, 0], target.cuda())
             loss.backward()
             # clip gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -320,8 +332,8 @@ def train(args, hiddens, states, chars, vocab):
             # target += 1e-6
             target = target.cuda()
 
-            # errors = torch.abs((logits[:, 0] - target)) # / target
-            errors = F.binary_cross_entropy_with_logits(logits[:, 0], target, reduction="none")
+            errors = torch.abs((logits[:, 0] - target)) # / target
+            # errors = F.binary_cross_entropy_with_logits(logits[:, 0], target, reduction="none")
             total += hidden.shape[0]
             val_loss += errors.sum().item()
 
@@ -336,19 +348,19 @@ def train(args, hiddens, states, chars, vocab):
     return model, optimizer
 
 def run(args, results):
-    hiddens = [result["hidden_outputs"][args.layer] for result in results]
+    hiddens = [result[args.hidden_key][args.layer] for result in results]
     states = [result["states"] for result in results]
     chars = [list(result["input"]) for result in results]
     vocab = results[0]["vocab"]
-    return train(args, hiddens, states, chars, vocab)
+    return train(args, hiddens, states, chars, vocab, ngram=args.ngram)
 
 
 if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exp", type=str, default="transformers/12")
-    parser.add_argument("--layer", type=int, default=1)
+    parser.add_argument("--exp", type=str, default="transformers/4")
+    parser.add_argument("--layer", type=int, default=3)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--n_epochs", type=int, default=4000)
     parser.add_argument("--lr", type=float, default=3e-4)
@@ -356,7 +368,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--use_wandb", action="store_true")
     parser.add_argument("--use_ratio", action="store_true")
-    parser.add_argument("--bigram", action="store_true")
+    parser.add_argument("--ngram", type=int, default=2)
+    parser.add_argument("--hidden_key", type=str, default="attention_contexts")
+
 
 
     args = parser.parse_args()
@@ -365,21 +379,24 @@ if __name__ == "__main__":
         wandb.init(project="bigram_classification", config=args)
         wandb.config.update(args)
 
-    exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
-                   'transformer/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-041944',
-                   'transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-295893',
-                   'transformer/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-403698',
-                   'linear_transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-52-854931',
-                   'retnet/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-646480',
-                   'rwkv/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-588119',
-                   'h3/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-27-29-253904',
-                   'hyena/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-614857',
-                   'lstm/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-00-28-036885',
-                   'transformer/12': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-222033',
-                   'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063',
-                   'lstm/3': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-28/11-12-43-061481'}
+    # exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
+    #                'transformer/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-041944',
+    #                'transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-295893',
+    #                'transformer/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-403698',
+    #                'linear_transformer/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-52-854931',
+    #                'retnet/4': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-646480',
+    #                'rwkv/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-588119',
+    #                'h3/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-27-29-253904',
+    #                'hyena/2': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-21-36-614857',
+    #                'lstm/1': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/12-00-28-036885',
+    #                'transformer/12': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-222033',
+    #                'linear_transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-201063',
+    #                'lstm/3': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-28/11-12-43-061481'}
 
-    results = get_results(exp_folders[args.exp] + "/generations/200_val.txt")
+    exp_folders = {'transformers/4': '/raid/lingo/akyurek/git/iclmodels/experiments/hiddens/softmax_transformer/2023-12-03/17-59-21-141536/generations/189_val.txt'}
+
+    results = get_results(exp_folders[args.exp])
+
     model, optimizer = run(args, results)
 
 
