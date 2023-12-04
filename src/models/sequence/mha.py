@@ -9,8 +9,11 @@ import src.models.nn.utils as U
 from einops import rearrange
 
 @TransposedModule
-class MultiheadAttention(SequenceModule):
-    """ Simple wrapper for MultiheadAttention """
+class MultiheadAttention(nn.Module):
+    """
+    Simple wrapper for MultiheadAttention 
+    Note that is another MHA in simply_lm.py. Be aware which one you use in your config file.
+    """
     def __init__(self, d_model, n_heads, *args, causal=True, **kwargs):
         super().__init__()
         self.d_model = d_model

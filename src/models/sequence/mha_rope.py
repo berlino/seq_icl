@@ -10,7 +10,7 @@ from einops import rearrange
 from src.models.sequence.rope import RotaryEmbedding
 
 
-class MultiHeadAttentionWithRope(SequenceModule):
+class MultiHeadAttentionWithRope(nn.Module):
     def __init__(self, d_model, n_heads, *args, causal=True, **kwargs):
         super().__init__()
         self.att_qkv = nn.Linear(d_model, d_model * 3)
@@ -27,8 +27,8 @@ class MultiHeadAttentionWithRope(SequenceModule):
 
         self.out_proj = nn.Linear(d_model, d_model)
 
-    def forward(self, src, attn_mask=None, return_attention=False):
-        assert self.causal and attn_mask is None
+    def forward(self, src, return_attention=False):
+        assert self.causal
 
         x = src
         B, L, _ = x.size()

@@ -195,6 +195,7 @@ class SequenceLightningModule(pl.LightningModule):
 
         # Instantiate model
         self.model = utils.instantiate(registry.model, self.hparams.model)
+        print("number of parameters: ", sum(p.numel() for p in self.model.parameters()))
 
         if (name := self.hparams.train.post_init_hook["_name_"]) is not None:
             kwargs = self.hparams.train.post_init_hook.copy()
