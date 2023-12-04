@@ -77,7 +77,7 @@ class MultiScaleRetention(nn.Module):
         output = output.transpose(1, 2)
         return output
 
-def forward(self, x, return_attention=False):
+    def forward(self, x, return_attention=False):
         bsz, tgt_len, _ = x.size()
         (sin, cos), inner_mask = self.xpos(tgt_len)
 

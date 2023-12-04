@@ -376,7 +376,7 @@ def create_mixer_cls(layer=None,
         mixer_cls = partial(mha_cls, causal=causal, layer_idx=layer_idx, linear_attention=linear_attention,
                             **(attn_cfg if attn_cfg is not None else {}),**factory_kwargs)
     else:
-        mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=layer_idx, **factory_kwargs)
+        mixer_cls = instantiate(registry.layer, layer, partial=True, layer_idx=layer_idx, **(attn_cfg if attn_cfg is not None else {}), **factory_kwargs)
     return mixer_cls
 
 
