@@ -36,13 +36,7 @@ def get_activation_fn(activation):
         raise NotImplementedError
 
 class MultiScaleRetention(nn.Module):
-    def __init__(self,
-                 d_model,
-                 n_heads=4,
-                 layer_idx=None,
-                 device=None,
-                 dtype=None):
-
+    def __init__(self, d_model, n_heads=4, layer_idx=None, device=None, dtype=None, token_residual=False):
         super().__init__()
         self.factor = 2
         self.embed_dim = d_model
@@ -64,6 +58,12 @@ class MultiScaleRetention(nn.Module):
         self.group_norm = LayerNorm(self.head_dim, eps=1e-5, elementwise_affine=False).to(device=device, dtype=dtype)
 
         self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(device=device, dtype=dtype)
+
+        self.token_residual = token_residual
+        if self.token_residual:
+            self.token_shift = nn.ZeroPad2d((0, 0, 1, -1))
+            self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
+            self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
 
     def parallel_forward(self, qr, kr, v, mask):
         bsz, tgt_len, embed_dim = v.size()
@@ -98,6 +98,12 @@ class MultiScaleRetention(nn.Module):
         output = self.group_norm(output).reshape(bsz, tgt_len, self.head_dim * self.num_heads)
         output = self.gate_fn(g) * output
         output = self.out_proj(output)
+
+        if self.token_residual:
+            x0 = self.token_shift(output)
+            x1 = output
+            output = self.t0 * x0 + self.t1 * x1
+
         if return_attention:
             return output, None
         return output
