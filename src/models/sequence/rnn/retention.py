@@ -36,7 +36,7 @@ def get_activation_fn(activation):
         raise NotImplementedError
 
 class MultiScaleRetention(nn.Module):
-    def __init__(self, d_model, n_heads=4, layer_idx=None, device=None, dtype=None, token_residual=False):
+    def __init__(self, d_model, n_heads=4, layer_idx=None, device=None, dtype=None, pt_residual=False, ih_residual=False):
         super().__init__()
         self.factor = 2
         self.embed_dim = d_model
@@ -59,9 +59,14 @@ class MultiScaleRetention(nn.Module):
 
         self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(device=device, dtype=dtype)
 
-        self.token_residual = token_residual
-        if self.token_residual:
+        self.pt_residual = pt_residual # prev-token residual
+        self.ih_residual = ih_residual # induciton-head residual
+        assert (pt_residual and ih_residual), "only one residual connection is allowed"
+        if self.pt_residual:
             self.token_shift = nn.ZeroPad2d((0, 0, 1, -1))
+            self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
+            self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
+        elif self.ih_residual:
             self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
             self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
 
@@ -76,6 +81,8 @@ class MultiScaleRetention(nn.Module):
         output = torch.matmul(qk_mat, vr)
         output = output.transpose(1, 2)
         return output
+    
+        
 
     def forward(self, x, return_attention=False):
         bsz, tgt_len, _ = x.size()
@@ -99,14 +106,21 @@ class MultiScaleRetention(nn.Module):
         output = self.gate_fn(g) * output
         output = self.out_proj(output)
 
-        if self.token_residual:
+        # if self.token_residual and self.layer_idx == 2:
+        if self.pt_residual:
             x0 = self.token_shift(output)
             x1 = output
             output = self.t0 * x0 + self.t1 * x1
+        elif self.ih_residual:
+            x0 = induction_head(x, output)
+            x1 = output
+            output = self.t0 * x0 + self.t1 * x1
 
+        # attention output is not supported from now
         if return_attention:
             return output, None
-        return output
+        else:
+            return output
 
 class RetNetRelPos(nn.Module):
     def __init__(self, n_embd, n_head):
@@ -153,3 +167,29 @@ class RetNetRelPos(nn.Module):
             retention_rel_pos = ((sin, cos), mask)
 
         return retention_rel_pos
+
+def induction_head(x, hidden_state):
+    """
+    Args:
+        x: bsz x input_len
+        hidden_state: bsz x input_len x d_model
+    Output:
+        bsz x input_len x d_model
+    """
+    bsz, seq_len = x.shape
+
+    # import pbd; pdb.set_trace()
+    same_mask = x[:, :, None] == x[:, None, :]
+    causal_mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device), diagonal=-1)
+    ih_mask = torch.logical_and(same_mask, causal_mask).float()
+    ih_mask_norm = ih_mask / ih_mask.sum(dim=2, keepdim=True)
+    ih_mask_norm = torch.nan_to_num(ih_mask_norm, 0)
+    output = torch.einsum("bmn,bnz->bmz", ih_mask_norm, hidden_state)
+    return output
+
+
+if __name__ == "__main__":
+    x = torch.LongTensor([[1, 2, 1, 3, 1], [1, 3, 2, 3, 4]])
+    y = torch.randn((2, 5))
+    output = induction_head(x, y)
+    print(output)
