@@ -61,7 +61,13 @@ class MultiScaleRetention(nn.Module):
 
         self.pt_residual = pt_residual # prev-token residual
         self.ih_residual = ih_residual # induciton-head residual
-        assert (pt_residual and ih_residual), "only one residual connection is allowed"
+        assert (pt_residual and ih_residual) is False, "only one residual connection is allowed"
+
+        # reset the residual connection if it is not the second-to-last layer
+        if self.layer_idx != 2:
+            self.pt_residual = False
+            self.ih_residual = False
+
         if self.pt_residual:
             self.token_shift = nn.ZeroPad2d((0, 0, 1, -1))
             self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
@@ -84,7 +90,7 @@ class MultiScaleRetention(nn.Module):
     
         
 
-    def forward(self, x, return_attention=False):
+    def forward(self, x, return_attention=False, input_ids=None):
         bsz, tgt_len, _ = x.size()
         (sin, cos), inner_mask = self.xpos(tgt_len)
 
@@ -106,15 +112,14 @@ class MultiScaleRetention(nn.Module):
         output = self.gate_fn(g) * output
         output = self.out_proj(output)
 
-        # if self.token_residual and self.layer_idx == 2:
         if self.pt_residual:
-            x0 = self.token_shift(output)
-            x1 = output
-            output = self.t0 * x0 + self.t1 * x1
+            h0 = self.token_shift(output)
+            h1 = output
+            output = self.t0 * h0 + self.t1 * h1
         elif self.ih_residual:
-            x0 = induction_head(x, output)
-            x1 = output
-            output = self.t0 * x0 + self.t1 * x1
+            h0 = induction_head(input_ids, output)
+            h1 = output
+            output = self.t0 * h0 + self.t1 * h1
 
         # attention output is not supported from now
         if return_attention:
@@ -190,6 +195,6 @@ def induction_head(x, hidden_state):
 
 if __name__ == "__main__":
     x = torch.LongTensor([[1, 2, 1, 3, 1], [1, 3, 2, 3, 4]])
-    y = torch.randn((2, 5))
+    y = torch.randn((2, 5, 32))
     output = induction_head(x, y)
     print(output)

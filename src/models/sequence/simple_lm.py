@@ -488,7 +488,8 @@ class LMBackbone(nn.Module):
             attention_outputs = None
 
         for layer in self.layers:
-            hidden_states, residual, attentions = layer(hidden_states, residual)
+            # hidden_states, residual, attentions = layer(hidden_states, residual)
+            hidden_states, residual, attentions = layer(hidden_states, residual, mixer_kwargs={"input_ids": input_ids})
             if return_hidden_outputs:
                 hidden_outputs.append(hidden_states.detach().cpu())
                 if attention_outputs is not None and attentions is not None:
