@@ -45,6 +45,7 @@ layer = {
     "lstm": "src.models.sequence.rnn.lstm.LSTMLayer",
     "rwkv": "src.models.sequence.rnn.rwkv.RWKVLayer",
     "retention": "src.models.sequence.rnn.retention.MultiScaleRetention",
+    "mamba": "src.models.sequence.rnn.mamba.MambaLayer",
 }
 
 callbacks = {

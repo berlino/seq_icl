@@ -45,7 +45,7 @@ def is_free(gpu_id):
         free_mem = torch.cuda.get_device_properties(
             gpu_id
         ).total_memory - torch.cuda.memory_allocated(gpu_id)
-        print(free_mem)
+        print("free memory: ", free_mem)
         return free_mem > 20e9
     except:
         print(f"GPU {gpu_id} is not available")
@@ -55,7 +55,7 @@ def is_free(gpu_id):
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
 
-    model_family = "h3"
+    model_family = "retnet"
 
     config = get_config(f"sweeps/hyper_{model_family}.yaml")
     sweeps = get_sweep(get_config(f"sweeps/hyper_{model_family}.yaml"))
@@ -63,7 +63,8 @@ if __name__ == "__main__":
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 2
 
-    gpus = {id: None for id in [1,2,3,4,5,6,7,8]}
+    # gpus = {id: None for id in [1,2,3,4,5,6,7,8]}
+    gpus = {id: None for id in [1]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
