@@ -5,12 +5,12 @@ defaults:
 
 model:
   _name_: lm_simple
-  d_model: 128
+  d_model: 128 # 128 or 256
   n_layer: 4
   attn_cfg:
     n_heads: 1
     pt_residual: false
-    ih_residual: true
+    ih_residual: false
   d_inner: ${eval:4 * ${.d_model}}
   vocab_size: ${dataset.vocab_size}
   resid_dropout: 0.0
