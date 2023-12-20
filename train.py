@@ -394,6 +394,7 @@ class SequenceLightningModule(pl.LightningModule):
         correct = 0.0
         for b in range(preds.shape[0]):
             current_labels = []
+            # breakpoint()
             pred_chars = [
                 self.task.dataset.vocab.get_vocab(token) for token in preds[b]
             ]

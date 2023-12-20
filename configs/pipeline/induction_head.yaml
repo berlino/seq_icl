@@ -8,8 +8,8 @@ defaults:
   - /callbacks: base
 
 dataset:
-  vocab_size: 20
-  input_seq_len: 30
+  vocab_size: 16
+  input_seq_len: 256
   copy_method: "induction_head"
 
 train:

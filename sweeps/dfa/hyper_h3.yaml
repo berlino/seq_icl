@@ -1,0 +1,27 @@
+program: train.py
+method: grid
+name: hyper_h3
+metric:
+  name: val/loss
+  goal: minimize
+parameters:
+  dataset.num_test_examples:
+    values: [1000]
+  model.d_model:
+    values: [128]
+  model.n_layer:
+    values: [4]
+  optimizer.lr:
+    values: [2.5e-4]
+  optimizer.weight_decay:
+    values: [0.1]
+  dataset.num_examples:
+    values: [40000]
+  experiment:
+    values: ["dfa/h3"]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

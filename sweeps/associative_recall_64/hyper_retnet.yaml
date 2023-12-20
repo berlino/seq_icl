@@ -1,0 +1,29 @@
+program: train.py
+method: grid
+name: hyper_retnet
+metric:
+  name: val/accuracy_ignore_index
+  goal: maximize
+parameters:
+  dataset.num_test_examples:
+    values: [500]
+  model.d_model:
+    values: [64]
+  optimizer.lr:
+    values: [5e-4]
+  optimizer.weight_decay:
+    values: [0.1]
+  model.n_layer:
+    values: [2]
+  dataset.num_examples:
+    values: [5000, 150, 300, 625, 1250, 2500]
+  trainer.max_epochs:
+    values: [200]
+  experiment:
+    values: ["synthetics/associative_recall/retnet"]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

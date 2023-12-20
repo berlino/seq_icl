@@ -157,7 +157,7 @@ def generate_assoc_recall(
         key_present[k] = True
         # vocab_seq.append(v)
 
-    
+
     k = tuple(rng.choice(list(kv_map.keys())))
     if not allow_dot:
         while k not in key_present:
@@ -204,7 +204,7 @@ class ICLDataModule(SequenceDataset):
         self.allow_dot = allow_dot
         self.max_copy_len = max_copy_len
         self.data_dir = data_dir
-        
+
         if test_seq_len is not None:
             self.test_seq_len = test_seq_len
         else:
@@ -252,15 +252,15 @@ class ICLDataModule(SequenceDataset):
     def setup(self, stage=None):
         train_tensor = test_tensor = None
         if self.data_dir is not None:
-            try: 
-                train_tensor = torch.load(os.path.join(self.data_dir, 
+            try:
+                train_tensor = torch.load(os.path.join(self.data_dir,
                     f"train_{self.copy_method}_{self.num_examples}_{self.vocab_size}_{self.input_seq_len}.pt"))
-                test_tensor = torch.load(os.path.join(self.data_dir, 
+                test_tensor = torch.load(os.path.join(self.data_dir,
                     f"test_{self.copy_method}_{self.num_examples}_{self.vocab_size}_{self.input_seq_len}.pt"))
             except:
                 pass
-                
-        if train_tensor is None or test_tensor is None:     
+
+        if train_tensor is None or test_tensor is None:
             if hasattr(self, 'dataset'):
                 return
             self.rng = np.random.default_rng(self.seed)
@@ -282,7 +282,7 @@ class ICLDataModule(SequenceDataset):
                     valid_chars=valid_vocab
                 )['input_ids'] for _ in tqdm(range(example_count))])
                 examples = torch.unique(examples, dim=0, sorted=False).tolist()
-                
+
                 while len(examples) < example_count:
                     new_example = self.generate_example(
                         seqlen=self.input_seq_len if i == 0 else self.test_seq_len,
@@ -310,7 +310,7 @@ class ICLDataModule(SequenceDataset):
                 torch.save(test_tensor, os.path.join(self.data_dir,
                     f"test_{self.copy_method}_{self.num_examples}_{self.vocab_size}_{self.input_seq_len}.pt")
                 )
-             
+        breakpoint()
         self.dataset = {
             'train': TensorDataset(train_tensor[:, 0, :], train_tensor[:, 1, :]),
             'test': TensorDataset(test_tensor[:, 0, :], test_tensor[:, 1, :])

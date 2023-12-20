@@ -15,5 +15,7 @@ model:
     num_heads: 2
     dropout: 0.1
   max_position_embeddings: ${dataset.__l_max} # positional embeddings
+  layer:
+    _name_: transformer
 
 encoder: position_id # get position ID

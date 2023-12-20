@@ -1,24 +1,24 @@
 program: train.py
 method: grid
-name: hyper_rwkv
+name: hyper_hyena
 metric:
   name: val/loss
   goal: minimize
 parameters:
-  dataset.num_examples:
-    values: [5000, 1000, 10000, 25000]
   dataset.num_test_examples:
     values: [1000]
   model.d_model:
-    values: [128, 512, 1024]
-  model.n_layer:
-    values: [2, 4, 8]
+    values: [256, 128]
   optimizer.lr:
-    values: [0.00025, 0.0001]
+    values: [1e-4, 2.5e-4]
   optimizer.weight_decay:
-    values: [0.01, 0.1]
+    values: [0.1]
+  model.n_layer:
+    values: [2, 4]
+  dataset.num_examples:
+    values: [40000]
   experiment:
-    values: ["dfa/rwkv"]
+    values: ["dfa/hyena"]
 
 command:
   - ${env}

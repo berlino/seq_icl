@@ -2,25 +2,27 @@ program: train.py
 method: grid
 name: hyper_stf
 metric:
-  name: val/loss
-  goal: minimize
+  name: val/accuracy_ignore_index
+  goal: maximize
 parameters:
   dataset.num_test_examples:
-    values: [1000]
+    values: [500]
   model.d_model:
-    values: [128]
+    values: [32, 256]
   model.attn_cfg.num_heads:
-    values: [1, 2, 4]
+    values: [1, 2]
   model.n_layer:
     values: [2, 4, 8]
   optimizer.lr:
-    values: [0.0001]
+    values: [1e-4, 2.5e-4]
   optimizer.weight_decay:
-    values: [0.01, 0.1]
+    values: [0.01]
   dataset.num_examples:
-    values: [2500, 5000, 10000, 20000]
+    values: [1250]
+  trainer.max_epochs:
+    values: [200]
   experiment:
-    values: ["dfa/transformer"]
+    values: ["synthetics/associative_recall/transformer"]
 
 command:
   - ${env}

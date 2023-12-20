@@ -10,10 +10,10 @@ trainer:
   max_epochs: 400
 
 dataset:
-  batch_size: 32
+  batch_size: 8
 
 train:
-  global_batch_size: 32
+  global_batch_size: 8
 
 scheduler:
   t_in_epochs: False

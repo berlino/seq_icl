@@ -162,6 +162,13 @@ class Vocab:
     def __init__(self, vocab_size: int, special_vocabs: Dict):
         # Special tokens hold seperator and noop/pad token etc
         self.special_vocabs = special_vocabs
+        # vocab = []
+        # i = 0
+        # while len(vocab) < vocab_size:
+        #     item = chr(i + 97)
+        #     if item not in self.special_vocabs.values():
+        #         vocab.append(item)
+        #     i += 1
         vocab = [chr(v + 97) for v in list(range(vocab_size))]
         self.non_special_vocab = sorted(list(vocab))
         self.vocab = sorted(list(set(vocab + list(self.special_vocabs.values()))))

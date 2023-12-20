@@ -1,7 +1,7 @@
 _name_: icl_dfa
 num_examples: 5000
 num_test_examples: 500
-vocab_size: 28
+vocab_size: 20
 max_num_nodes: 12
 max_num_in_context_examples: 20
 min_num_in_context_examples: 10

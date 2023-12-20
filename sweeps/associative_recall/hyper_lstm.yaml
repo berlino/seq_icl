@@ -1,0 +1,29 @@
+program: train.py
+method: grid
+name: hyper_lstm
+metric:
+  name: val/accuracy_ignore_index
+  goal: maximize
+parameters:
+  dataset.num_test_examples:
+    values: [500]
+  model.d_model:
+    values: [128, 256]
+  optimizer.lr:
+    values: [2.5e-4, 1e-4]
+  optimizer.weight_decay:
+    values: [0.1]
+  model.n_layer:
+    values: [2, 3]
+  trainer.max_epochs:
+    values: [200]
+  dataset.num_examples:
+    values: [5000, 300, 625, 1250, 2500]
+  experiment:
+    values: ["synthetics/associative_recall/lstm"]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

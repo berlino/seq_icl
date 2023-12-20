@@ -1,6 +1,6 @@
 program: train.py
 method: grid
-name: hyper_lstm
+name: hyper_rwkv
 metric:
   name: val/loss
   goal: minimize
@@ -8,17 +8,17 @@ parameters:
   dataset.num_test_examples:
     values: [1000]
   model.d_model:
-    values: [256]
-  optimizer.lr:
-    values: [0.00025]
-  optimizer.weight_decay:
-    values: [0.01, 0.1]
-  experiment:
-    values: ["dfa/lstm"]
+    values: [128]
   model.n_layer:
-    values: [2, 3]
+    values: [4]
+  optimizer.lr:
+    values: [1e-4, 2.5e-4]
+  optimizer.weight_decay:
+    values: [0.1]
   dataset.num_examples:
-    values: [2500, 5000, 10000, 20000]
+    values: [20000]
+  experiment:
+    values: ["dfa/rwkv"]
 
 command:
   - ${env}

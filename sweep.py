@@ -55,15 +55,23 @@ def is_free(gpu_id):
 if __name__ == "__main__":
     os.environ["PYTHONHASHSEED"] = "0"
 
-    model_family = "h3"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_family", type=str, default="hyena")
+    parser.add_argument("--task", type=str, default="associative_recall")
+    args = parser.parse_args()
 
-    config = get_config(f"sweeps/hyper_{model_family}.yaml")
-    sweeps = get_sweep(get_config(f"sweeps/hyper_{model_family}.yaml"))
-    sweep_folder = f"hyper/experiments/{model_family}/"
+
+    model_family = args.model_family
+    task = args.task
+
+    config = get_config(f"sweeps/{task}/hyper_{model_family}.yaml")
+    sweeps = get_sweep(get_config(f"sweeps/{task}/hyper_{model_family}.yaml"))
+    sweep_folder = f"hyper/experiments/{task}/{model_family}/"
     os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 2
+    hash_offset = 3
 
-    gpus = {id: None for id in [1,2,3,4,5,6,7,8]}
+    gpus = {id: None for id in [2, 6, 7, 8, 9, 10, 12, 13, 14, 15]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -82,7 +90,7 @@ if __name__ == "__main__":
                             "export PYTHONHASHSEED=0; export"
                             f' CUDA_VISIBLE_DEVICES={gpu_id}; python -c "import'
                             ' pykeops; pykeops.clean_pykeops();"; python train.py'
-                            f' wandb.project="dfa_learning_curves" hydra.run.dir="./experiments/{model_family}/'
+                            f' wandb.project="{task}_learning_curves_eval" hydra.run.dir="./experiments/{task}/{model_family}/'
                             '\${now:%Y-%m-%d}/\${now:%H-%M-%S-%f}"'
                             f' {sweep} 1>'
                             f" {sweep_folder}/{sweep_hash}.log 2>"
