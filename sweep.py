@@ -71,7 +71,7 @@ if __name__ == "__main__":
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 3
 
-    gpus = {id: None for id in [2, 6, 7, 8, 9, 10, 12, 13, 14, 15]}
+    gpus = {id: None for id in [1,2,3,4,5,6,7,8,9,10,11,12]}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False

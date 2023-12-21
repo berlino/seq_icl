@@ -83,7 +83,7 @@ def get_dfa_states(input, dfa, in_states=False):
     return states
 
 
-def get_results(file, probs_only=False, layer=None, key=None, subset=None):
+def get_results(file, probs_only=False, layer=None, key=None, subset=None, in_states=False):
     basename = os.path.basename(file)
     basename = (
         basename.replace("_train.txt", "")
@@ -134,7 +134,7 @@ def get_results(file, probs_only=False, layer=None, key=None, subset=None):
         datum["dfa"] =  content[pkl_index]["dfas"][batch_index]
         datum["char_labels"] = content[pkl_index]["char_labels"][batch_index]
         datum["probs"] = content[pkl_index]["probs"][batch_index]
-        datum["states"] = get_dfa_states(datum["input"], datum["dfa"], in_states=False)
+        datum["states"] = get_dfa_states(datum["input"], datum["dfa"], in_states=in_states)
 
         for key_other in ["hidden_outputs", "attention_scores", "attention_contexts"]:
             if key_other in content[pkl_index]:
@@ -200,6 +200,73 @@ class ProbeModel(nn.Module):
         x = self.fc2(x)
         return x
 
+class SameStateProbeModel(nn.Module):
+    def __init__(self, nhid, dropout=0.1, bigram=False):
+        super(SameStateProbeModel, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.project1 = nn.Linear(nhid, nhid)
+
+        self.fc1 = nn.Linear(3 * nhid, nhid)
+        self.fc2 = nn.Linear(nhid, 2, bias=False)
+
+    def forward(self, hiddens1, hiddens2):
+        hiddens1 = self.project1(self.dropout(hiddens1))
+        hiddens2 = self.project1(self.dropout(hiddens2))
+        x = torch.cat((hiddens1, hiddens2, hiddens1 * hiddens2), dim=1)
+        x = self.fc1(x)
+        x = torch.tanh(x)
+        x = self.fc2(x)
+        return x
+
+
+class SameStateProbeDataset(Dataset):
+    def __init__(self, hiddens, states, chars, vocab):
+        self.hiddens = hiddens
+        self.states = states
+        self.chars = chars
+        self.vocab = vocab
+        assert len(self.hiddens) == len(self.states)
+        assert len(self.hiddens) == len(self.chars)
+
+    def __len__(self):
+        return len(self.states)
+
+    def __getitem__(self, index):
+        state_info = self.states[index]
+
+        if np.random.rand() < 0.5:
+            time_step1 = 0
+            time_step2 = 0
+            time_step1, time_step2 = np.random.choice(list(range(1, len(state_info))), 2)
+            state1 = state_info[time_step1]
+            state2 = state_info[time_step2]
+            label = state1 == state2
+        else:
+            # sample same states
+            state = np.random.choice(list(set(state_info) - {-1}))
+            # find timesteps that matches the sate
+            time_steps = np.where(state_info == state)[0]
+            # sample two random time steps
+            time_step1, time_step2 = np.random.choice(time_steps, size=2, replace=True)
+            state1 = state_info[time_step1]
+            state2 = state_info[time_step2]
+            label = state1 == state2
+
+        hidden1 = self.hiddens[index][time_step1]
+        hidden2 = self.hiddens[index][time_step2]
+
+        return torch.tensor(hidden1), torch.tensor(hidden2), int(label)
+
+    def collate_fn(self, batch):
+        hiddens1, hiddens2, label = zip(*batch)
+        hiddens1 = torch.stack(hiddens1, dim=0)
+        if hiddens1.dim() == 3:
+            hiddens1 = hiddens1.reshape(hiddens1.shape[0], -1)
+        hiddens2 = torch.stack(hiddens2, dim=0)
+        if hiddens2.dim() == 3:
+            hiddens2 = hiddens2.reshape(hiddens2.shape[0], -1)
+        labels = torch.tensor(label, dtype=torch.long)
+        return hiddens1, hiddens2, labels
 
 class StateProbeDataset(Dataset):
     def __init__(self, hiddens, states, chars, vocab, use_ratio=False, ngram=False, binary=False):
@@ -330,6 +397,101 @@ class StateProbeDataset(Dataset):
         totals = torch.tensor(totals).float()
         return hiddens, chars, counts, totals
 
+def same_state_train(args, hiddens, states, chars, vocab):
+    # init Transformer Encoder with causal masking
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("device:", device)
+    # model
+    dataset = SameStateProbeDataset(hiddens, states, chars, vocab)
+    # split
+    train_size = int(0.95 * len(dataset))
+    train = torch.utils.data.Subset(dataset, list(range(train_size)))
+    val = torch.utils.data.Subset(dataset, list(range(train_size, len(dataset))))
+    train_loader = DataLoader(
+        train, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn
+    )
+    val_loader = DataLoader(
+        val, batch_size=args.batch_size, shuffle=False, collate_fn=dataset.collate_fn
+    )
+
+    nhid = hiddens[0][0].reshape(-1).shape[0]
+
+    model = SameStateProbeModel(nhid=nhid)
+    model.to(device)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, args.n_epochs, eta_min=args.min_lr
+    )
+    model.train()
+
+    for e in range(args.n_epochs):
+        for hiddens1, hiddens2, labels in train_loader:
+            optimizer.zero_grad()
+            logits = model(hiddens1.cuda(), hiddens2.cuda())
+            loss = F.cross_entropy(logits, labels.cuda())
+            loss.backward()
+            # clip gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+        scheduler.step()
+        # print("learning rate:", scheduler.get_last_lr()[0])
+
+        # validation
+        total = 0.0
+        val_corrects = 0.0
+        model.eval()
+        for hiddens1, hiddens2, labels in val_loader:
+            logits = model(hiddens1.cuda(), hiddens2.cuda())
+            preds = torch.argmax(logits, dim=1)
+            corrects = preds == labels.cuda()
+            total += hiddens1.shape[0]
+            val_corrects += corrects.sum().item()
+        val_corrects /= total
+        if args.use_wandb:
+            wandb.log({"val/acc": val_corrects})
+        else:
+            print("val/acc:", val_corrects)
+        model.train()
+
+    wandb.log({"val/final_acc": val_corrects})
+    return model, optimizer
+
+def same_state_evaluate(args, model, hiddens, states, chars, vocab):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("device:", device)
+    # model
+    dataset = SameStateProbeDataset(
+        hiddens, states, chars, vocab
+    )
+
+    test_loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn
+    )
+
+    total = 0.0
+    test_corrects = 0.0
+    model.eval()
+    for _ in range(20):
+        for hiddens1, hiddens2, labels in test_loader:
+            logits = model(hiddens1.cuda(), hiddens2.cuda())
+            preds = torch.argmax(logits, dim=1)
+            corrects = preds == labels.cuda()
+            total += hiddens1.shape[0]
+            test_corrects += corrects.sum().item()
+        # test_corrects /= total
+        # if args.use_wandb:
+        #     wandb.log({"test/acc": test_corrects})
+        # else:
+        #     print("test/acc:", test_corrects)
+
+    test_corrects /= total
+
+    metric = "acc"
+
+    if args.use_wandb:
+        wandb.log({f"test/final_{metric}": test_corrects})
+    else:
+        print({f"test/final_{metric}": test_corrects})
 
 def train(args, hiddens, states, chars, vocab):
     # init Transformer Encoder with causal masking
@@ -490,6 +652,12 @@ def run(args, training, testing):
     hiddens, states, chars, vocab = prepare_data(testing)
     evaluate(args, model, hiddens, states, chars, vocab)
 
+def run_same_state(args, training, testing):
+    hiddens, states, chars, vocab = prepare_data(training)
+    model, optimizer = same_state_train(args, hiddens, states, chars, vocab)
+    hiddens, states, chars, vocab = prepare_data(testing)
+    same_state_evaluate(args, model, hiddens, states, chars, vocab)
+
 
 
 
@@ -516,7 +684,7 @@ if __name__ == "__main__":
     if args.use_wandb:
         import wandb
 
-        wandb.init(project="interpret_dfa_all_probes", config=args)
+        wandb.init(project="interpret_dfa_all_probes_2500", config=args)
         wandb.config.update(args)
 
     # exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
@@ -562,12 +730,16 @@ if __name__ == "__main__":
         "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_2/generations/177_test.txt",
         "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer/generations/184_test.txt",
         "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_4/generations/194_test.txt",
+        "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_8_w_hiddens/generations/174_test.txt",
     }
 
-    training_data = get_results(exp_folders_40000[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
-    testing_data = get_results(exp_folders_40000[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
+    training_data = get_results(exp_folders_2500[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
+    testing_data = get_results(exp_folders_2500[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
 
-    run(args, training_data, testing_data)
+    if args.ngram == 0:
+        run_same_state(args, training_data, testing_data)
+    else:
+        run(args, training_data, testing_data)
 
 
 # def minimize(dfa):

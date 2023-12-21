@@ -28,3 +28,4 @@ hydra_core
 opt_einsum
 rich
 pythomata
+mamba-ssm

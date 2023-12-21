@@ -1,0 +1,27 @@
+program: train.py
+method: grid
+name: hyper_mamba
+metric:
+  name: val/loss
+  goal: minimize
+parameters:
+  dataset.num_test_examples:
+    values: [1000]
+  model.d_model:
+    values: [512, 1024]
+  optimizer.lr:
+    values: [2.5e-4]
+  optimizer.weight_decay:
+    values: [0.1]
+  model.n_layer:
+    values: [4, 8]
+  dataset.num_examples:
+    values: [1000, 2500, 5000, 10000, 20000, 40000]
+  experiment:
+    values: ["dfa/mamba"]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

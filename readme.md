@@ -8,6 +8,18 @@ pip install -r requirements.txt
 
 Note that python version is 3.11.
 
+Setup mamba-ssm with the following command:
+```bash
+pip install mamba-ssm # w. cuda12.1
+```
+And set up conv1d following the command in [this issue](https://github.com/state-spaces/mamba/issues/55)
+```
+git clone https://github.com/Dao-AILab/causal-conv1d.git
+cd causal_conv1d
+git checkout v1.0.2  # this is the highest compatible version allowed by Mamba
+CAUSAL_CONV1D_FORCE_BUILD=TRUE pip install .
+```
+
 ### Experiments on Associative Recall
 
 ```bash
@@ -20,7 +32,7 @@ python -m train experiment=synthetics/associative_recall/lstm
 python -m train experiment=synthetics/associative_recall/rwkv
 ```
 
-| | Transformer | S4D | H3 | GILR | LRU | LSTM | RWKV | Random 
+| | Transformer | S4D | H3 | GILR | LRU | LSTM | RWKV | Random
 |---|:---:|:---:|:---:|:---:|:---:| :---:|:---:|:---:|
 | Test Accuracy |  100.0 | 32.4 | 98.2  | 50.2  | 11.6 | 36.2 | 30.0 | 25.0 |
 
@@ -50,7 +62,7 @@ python -m train experiment=dfa/transformer+
 ```
 
 
-To run the generation, 
+To run the generation,
 ```bash
 python -m generate experiment=dfa/lstm train.ckpt="outputs/2023-09-18/08-23-56-668022/seq-icl-data/mbg9ohwc/checkpoints/epoch\=70-step\=11147.ckpt" hydra.run.dir="./"
 ```

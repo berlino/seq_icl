@@ -10,10 +10,10 @@ def prepare_video(glob_str, folder, filename):
     # remove all files in the folder
     for file in files:
         # copy files to a new folder
-        id = int(os.path.basename(file).split("_")[-1].replace(".png", ""))
+        id = int(os.path.basename(file).split("_")[-1].replace(".jpg", ""))
         # make all ids 3 digit
         id = str(id).zfill(3)
-        os.system(f"cp {file} {folder}/{id}.png")
+        os.system(f"cp {file} {folder}/{id}.jpg")
 
 
     # Build the FFmpeg command
@@ -21,7 +21,7 @@ def prepare_video(glob_str, folder, filename):
         'ffmpeg',
         '-framerate', '2',
         "-pattern_type", "glob",
-        '-i', f'{folder}/*.png',
+        '-i', f'{folder}/*.jpg',
         '-pix_fmt', 'yuv420p',
         f"{folder}/{filename}.mp4"
     ]
@@ -34,7 +34,7 @@ def prepare_video(glob_str, folder, filename):
         print(f"Error: {e}")
 
     # remove png files
-    os.system(f"rm {folder}/*.png")
+    os.system(f"rm {folder}/*.jpg")
     return f"{folder}/{filename}.mp4"
 
 if __name__ == "__main__":
