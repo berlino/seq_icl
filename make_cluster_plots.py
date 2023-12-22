@@ -89,8 +89,8 @@ def plot_clusters(
                             ax.scatter(
                                 X_layer[indices, 0],
                                 X_layer[indices, 1],
-                                marker=fill_types[ci],
-                                c=colors[states.index(label)],
+                                marker=fill_types[states.index(label)],
+                                c=colors[ci],
                             )
                             # show legend
                 # set title
@@ -184,7 +184,7 @@ if __name__ == "__main__":
         1: (1, 1),
     }
 
-    exp_folder = exp_folders_40000[args.exp]
+    exp_folder = exp_folders_2500[args.exp]
     print(exp_folder)
     print(args)
 
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         plot_folder,
         hidden_key=args.hidden_key,
         indices=[0,],
-        reduction="tsne",
+        reduction="pca",
         layer_wise=True,
         factors=factors,
         fill_types=fill_types,

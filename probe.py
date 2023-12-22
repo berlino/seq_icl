@@ -684,7 +684,7 @@ if __name__ == "__main__":
     if args.use_wandb:
         import wandb
 
-        wandb.init(project="interpret_dfa_all_probes_2500", config=args)
+        wandb.init(project="interpret_dfa_all_probes", config=args)
         wandb.config.update(args)
 
     # exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
@@ -712,7 +712,8 @@ if __name__ == "__main__":
         "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer/generations/176_test.txt",
         "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_2/generations/197_test.txt",
         "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_4/generations/155_test.txt",
-        "transformer/1": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_1/generations/13_val.txt"
+        "transformer/1": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_1/generations/13_val.txt",
+        "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/mamba/generations/158_test.txt",
         # "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/
@@ -731,10 +732,11 @@ if __name__ == "__main__":
         "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer/generations/184_test.txt",
         "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_4/generations/194_test.txt",
         "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_8_w_hiddens/generations/174_test.txt",
+        "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/mamba/generations/196_test.txt",
     }
 
-    training_data = get_results(exp_folders_2500[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
-    testing_data = get_results(exp_folders_2500[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
+    training_data = get_results(exp_folders_40000[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
+    testing_data = get_results(exp_folders_40000[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
 
     if args.ngram == 0:
         run_same_state(args, training_data, testing_data)
