@@ -59,6 +59,8 @@ To run the training,
 python -m train experiment=dfa/lstm
 python -m train experiment=dfa/retnet
 python -m train experiment=dfa/transformer+
+python -m train experiment=dfa/mamba
+python -m train experiment=dfa/gla dataset.num_examples=5000 dataset.num_test_examples=1000 +wandb.entity=akyurek
 ```
 
 

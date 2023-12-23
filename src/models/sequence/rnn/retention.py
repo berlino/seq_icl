@@ -75,13 +75,13 @@ class MultiScaleRetention(nn.Module):
 
         if self.pt_residual:
             self.token_shift = nn.ZeroPad2d((0, 0, 1, -1))
-            # self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
-            # self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
+            # self.t0 = torch.nn.Parameter(torch.zeros(2 * self.embed_dim))
+            # self.t1 = torch.nn.Parameter(torch.ones(2 * self.embed_dim))
             self.t0 = torch.nn.Linear(2 * self.embed_dim, 2 * self.embed_dim)
             self.t1 = torch.nn.Linear(2 * self.embed_dim, 2 * self.embed_dim)
         elif self.ih_residual:
-            # self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
-            # self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
+            # self.t0 = torch.nn.Parameter(torch.zeros(2 * self.embed_dim))
+            # self.t1 = torch.nn.Parameter(torch.ones(2 * self.embed_dim))
             self.t0 = torch.nn.Linear(2 * self.embed_dim, 2 * self.embed_dim)
             self.t1 = torch.nn.Linear(2 * self.embed_dim, 2 * self.embed_dim)
 
@@ -205,7 +205,9 @@ def induction_head(x, hidden_state, shift_right=True):
     causal_mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device), diagonal=-1)
     ih_mask = torch.logical_and(same_mask, causal_mask).float()
     if shift_right:
-        ih_mask = F.pad(ih_mask, (-1, 1), "constant", False)
+        # ih_mask = F.pad(ih_mask, (-1, 1), "constant", False)
+        shifted_ih_mask = F.pad(ih_mask, (-1, 1), "constant", False)
+        ih_mask = torch.logical_or(ih_mask, shifted_ih_mask)
     ih_mask_norm = ih_mask / ih_mask.sum(dim=2, keepdim=True)
     ih_mask_norm = torch.nan_to_num(ih_mask_norm, 0)
     output = torch.einsum("bmn,bnz->bmz", ih_mask_norm, hidden_state)
