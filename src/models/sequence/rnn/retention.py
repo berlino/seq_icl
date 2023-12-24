@@ -8,11 +8,13 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import LayerNorm
 
+
 def rotate_every_two(x):
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
     x = torch.stack((-x2, x1), dim=-1)
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')\
+
 
 def duplicate_interleave(m):
     """
@@ -24,8 +26,10 @@ def duplicate_interleave(m):
     m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
     return m
 
+
 def theta_shift(x, sin, cos):
     return (x * cos) + (rotate_every_two(x) * sin)
+
 
 def get_activation_fn(activation):
     if activation == "swish":
@@ -35,41 +39,104 @@ def get_activation_fn(activation):
     else:
         raise NotImplementedError
 
-class MultiScaleRetention(nn.Module):
-    def __init__(self,
-                 d_model,
-                 n_heads=4,
-                 layer_idx=None,
-                 device=None,
-                 dtype=None):
 
+class MultiScaleRetention(nn.Module):
+    def __init__(self, d_model, n_heads=4, layer_idx=None, device=None, dtype=None):
         super().__init__()
         self.factor = 2
         self.embed_dim = d_model
         self.num_heads = n_heads
         self.head_dim = self.embed_dim * self.factor // self.num_heads
         self.key_dim = self.embed_dim // self.num_heads
-        self.scaling = self.key_dim ** -0.5
+        self.scaling = self.key_dim**-0.5
         self.layer_idx = layer_idx
 
-        self.gate_fn = get_activation_fn(activation="swish")
+        # reset the residual connection if it is not the second-to-last layer
+        if self.layer_idx == 2:
+            self.pt_residual = True
+            self.ih_residual = False
+        elif self.layer_idx == 3:
+            self.pt_residual = False
+            self.ih_residual = True
+            self.ih_shift_step = 1
+            self.ngram = 1
+        elif self.layer_idx == 4:
+            self.pt_residual = False
+            self.ih_residual = True
+            self.ih_shift_step = 1
+            self.ngram = 2
+        elif self.layer_idx == 5:
+            self.pt_residual = False
+            self.ih_residual = True
+            self.ih_shift_step = 1
+            self.ngram = 3
+        else:
+            self.pt_residual = False
+            self.ih_residual = False
 
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(device=device, dtype=dtype)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(device=device, dtype=dtype)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True).to(device=device, dtype=dtype)
-        self.g_proj = nn.Linear(self.embed_dim, self.embed_dim * self.factor, bias=True).to(device=device, dtype=dtype)
-        self.out_proj = nn.Linear(self.embed_dim * self.factor, self.embed_dim, bias=True).to(device=device, dtype=dtype)
+        print(
+            f"layer {self.layer_idx} pt_residual: {self.pt_residual}, ih_residual:"
+            f" {self.ih_residual}"
+        )
 
-        # 1e-5 is used in the official implementation
-        self.group_norm = LayerNorm(self.head_dim, eps=1e-5, elementwise_affine=False).to(device=device, dtype=dtype)
+        nonstandard_retnet = self.pt_residual or self.ih_residual
 
-        self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(device=device, dtype=dtype)
+        if not nonstandard_retnet:
+            self.gate_fn = get_activation_fn(activation="swish")
+            self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(
+                device=device, dtype=dtype
+            )
+            self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(
+                device=device, dtype=dtype
+            )
+            self.v_proj = nn.Linear(
+                self.embed_dim, self.embed_dim * self.factor, bias=True
+            ).to(device=device, dtype=dtype)
+            self.g_proj = nn.Linear(
+                self.embed_dim, self.embed_dim * self.factor, bias=True
+            ).to(device=device, dtype=dtype)
+            self.out_proj = nn.Linear(
+                self.embed_dim * self.factor, self.embed_dim, bias=True
+            ).to(device=device, dtype=dtype)
+
+            # 1e-5 is used in the official implementation
+            self.group_norm = LayerNorm(
+                self.head_dim, eps=1e-5, elementwise_affine=False
+            ).to(device=device, dtype=dtype)
+
+            self.xpos = RetNetRelPos(self.embed_dim, self.num_heads).to(
+                device=device, dtype=dtype
+            )
+        else:
+            if self.pt_residual:
+                self.token_shift = nn.ZeroPad2d((0, 0, 1, -1))
+                # self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
+                # self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
+                self.t0 = torch.nn.Linear(self.embed_dim, self.embed_dim).to(
+                    device=device, dtype=dtype
+                )
+                self.t1 = torch.nn.Linear(self.embed_dim, self.embed_dim).to(
+                    device=device, dtype=dtype
+                )
+            elif self.ih_residual:
+                # self.t0 = torch.nn.Parameter(torch.zeros(self.embed_dim))
+                # self.t1 = torch.nn.Parameter(torch.ones(self.embed_dim))
+                self.t0 = torch.nn.Linear(self.embed_dim, self.embed_dim).to(
+                    device=device, dtype=dtype
+                )
+                self.t1 = torch.nn.Linear(self.embed_dim, self.embed_dim).to(
+                    device=device, dtype=dtype
+                )
+
+            self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True).to(
+                device=device, dtype=dtype
+            )
 
     def parallel_forward(self, qr, kr, v, mask):
         bsz, tgt_len, embed_dim = v.size()
         vr = v.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        qk_mat = qr @ kr.transpose(-1, -2) # bsz * m * tgt_len * tgt_len
+        qk_mat = qr @ kr.transpose(-1, -2)  # bsz * m * tgt_len * tgt_len
         qk_mat = qk_mat * mask
         # invariant after normalization
         qk_mat = qk_mat / qk_mat.detach().sum(dim=-1, keepdim=True).abs().clamp(min=1)
@@ -77,30 +144,55 @@ class MultiScaleRetention(nn.Module):
         output = output.transpose(1, 2)
         return output
 
-    def forward(self, x, return_attention=False):
+    def forward(self, x, return_attention=False, input_ids=None):
+        nonstandard_retnet = self.pt_residual or self.ih_residual
+
         bsz, tgt_len, _ = x.size()
-        (sin, cos), inner_mask = self.xpos(tgt_len)
 
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-        g = self.g_proj(x)
+        if nonstandard_retnet:
+            if self.pt_residual:
+                # h0 = self.token_shift(output)
+                h0 = self.token_shift(x)
+                h1 = x
+                # output = self.t0 * h0 + self.t1 * h1
+                # breakpoint()
+                output = self.t0(h0) + self.t1(h1)
+            elif self.ih_residual:
+                # h0 = induction_head(input_ids, output)
+                h0 = induction_head(input_ids, x, shift_step=self.ih_shift_step, ngram=self.ngram)
+                h1 = x
+                # output = self.t0 * h0 + self.t1 * h1
+                output = self.t0(h0) + self.t1(h1)
+        else:
+            (sin, cos), inner_mask = self.xpos(tgt_len)
 
-        k *= self.scaling
-        q = q.view(bsz, tgt_len, self.num_heads, self.key_dim).transpose(1, 2)
-        k = k.view(bsz, tgt_len, self.num_heads, self.key_dim).transpose(1, 2)
+            q = self.q_proj(x)
+            k = self.k_proj(x)
+            v = self.v_proj(x)
+            g = self.g_proj(x)
 
-        qr = theta_shift(q, sin, cos)
-        kr = theta_shift(k, sin, cos)
+            k *= self.scaling
+            q = q.view(bsz, tgt_len, self.num_heads, self.key_dim).transpose(1, 2)
+            k = k.view(bsz, tgt_len, self.num_heads, self.key_dim).transpose(1, 2)
 
-        output = self.parallel_forward(qr, kr, v, inner_mask)
+            qr = theta_shift(q, sin, cos)
+            kr = theta_shift(k, sin, cos)
 
-        output = self.group_norm(output).reshape(bsz, tgt_len, self.head_dim * self.num_heads)
-        output = self.gate_fn(g) * output
+            output = self.parallel_forward(qr, kr, v, inner_mask)
+
+            output = self.group_norm(output).reshape(
+                bsz, tgt_len, self.head_dim * self.num_heads
+            )
+            output = self.gate_fn(g) * output
+
         output = self.out_proj(output)
+
+        # attention output is not supported from now
         if return_attention:
             return output, None
-        return output
+        else:
+            return output
+
 
 class RetNetRelPos(nn.Module):
     def __init__(self, n_embd, n_head):
@@ -123,8 +215,14 @@ class RetNetRelPos(nn.Module):
             cos = torch.cos(index[:, None] * self.angle[None, :])
 
             block_index = torch.arange(self.recurrent_chunk_size).to(self.decay)
-            mask = torch.tril(torch.ones(self.recurrent_chunk_size, self.recurrent_chunk_size).to(self.decay))
-            mask = torch.masked_fill(block_index[:, None] - block_index[None, :], ~mask.bool(), float("inf"))
+            mask = torch.tril(
+                torch.ones(self.recurrent_chunk_size, self.recurrent_chunk_size).to(
+                    self.decay
+                )
+            )
+            mask = torch.masked_fill(
+                block_index[:, None] - block_index[None, :], ~mask.bool(), float("inf")
+            )
             mask = torch.exp(mask * self.decay[:, None, None])
             mask = torch.nan_to_num(mask)
             scale = mask.sum(dim=-1, keepdim=True).sqrt()
@@ -140,10 +238,59 @@ class RetNetRelPos(nn.Module):
             sin = torch.sin(index[:, None] * self.angle[None, :])
             cos = torch.cos(index[:, None] * self.angle[None, :])
             mask = torch.tril(torch.ones(slen, slen).to(self.decay))
-            mask = torch.masked_fill(index[:, None] - index[None, :], ~mask.bool(), float("inf"))
+            mask = torch.masked_fill(
+                index[:, None] - index[None, :], ~mask.bool(), float("inf")
+            )
             mask = torch.exp(mask * self.decay[:, None, None])
             mask = torch.nan_to_num(mask)
             mask = mask / mask.sum(dim=-1, keepdim=True).sqrt()
             retention_rel_pos = ((sin, cos), mask)
 
         return retention_rel_pos
+
+
+def induction_head(x, hidden_state, shift_step=1, ngram=1):
+    """
+    Args:
+        x: bsz x input_len
+        hidden_state: bsz x input_len x d_model
+        shift_right: use the second token from the bigram
+    Output:
+        bsz x input_len x d_model
+    """
+    bsz, seq_len = x.shape
+
+    # bsz x L x L
+    # match ngrams in the input sequence
+    mask_0 = x[:, None, :] == x[:, :, None]
+
+    causal_mask = torch.tril(
+        torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device), diagonal=-1
+    )
+    mask_0 = torch.logical_and(mask_0, causal_mask)
+
+    masks = [mask_0.long()]
+    for _ in range(1, ngram):
+        mask_0 = F.pad(mask_0, (1, -1, 1, -1), "constant", False)
+        masks.append(mask_0.long())
+
+    ih_mask = torch.stack(masks, dim=-1).sum(dim=-1) >= ngram
+
+    if shift_step > 0:
+        ih_mask = F.pad(ih_mask, (shift_step, -shift_step), "constant", False)
+
+
+    ih_mask = torch.logical_and(ih_mask, causal_mask)
+
+
+    ih_mask_norm = ih_mask / ih_mask.sum(dim=2, keepdim=True)
+    ih_mask_norm = torch.nan_to_num(ih_mask_norm, 0)
+    output = torch.einsum("bmn,bnz->bmz", ih_mask_norm, hidden_state)
+    return output
+
+
+if __name__ == "__main__":
+    x = torch.LongTensor([[1, 2, 1, 3, 1, 2, 1], [1, 3, 1, 3, 4, 1, 1]])
+    y = torch.randn((2, 7, 32))
+    output = induction_head(x, y, ngram=2)
+    print(output)
