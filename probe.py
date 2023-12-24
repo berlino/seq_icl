@@ -679,12 +679,19 @@ if __name__ == "__main__":
     parser.add_argument("--ngram", type=int, default=2)
     parser.add_argument("--hidden_key", type=str, default="hidden_outputs")
     parser.add_argument("--binary", action="store_true")
+    parser.add_argument("--num_examples", type=int, default=40000)
 
     args = parser.parse_args()
     if args.use_wandb:
         import wandb
 
-        wandb.init(project="interpret_dfa_all_probes", config=args)
+        if args.num_examples == 2500:
+            wandb.init(project=f"interpret_dfa_all_probes_2500", config=args)
+        elif args.num_examples == 40000:
+            wandb.init(project=f"interpret_dfa_all_probes", config=args)
+        else:
+            raise ValueError("num_examples must be 2500 or 40000")
+
         wandb.config.update(args)
 
     # exp_folders = {'transformer/8': '/raid/lingo/akyurek/git/iclmodels/outputs/2023-11-15/11-44-53-320622',
@@ -735,8 +742,15 @@ if __name__ == "__main__":
         "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/mamba/generations/196_test.txt",
     }
 
-    training_data = get_results(exp_folders_40000[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
-    testing_data = get_results(exp_folders_40000[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
+    if args.num_examples == 2500:
+        exp_folders = exp_folders_2500
+    elif args.num_examples == 40000:
+        exp_folders = exp_folders_40000
+    else:
+        raise ValueError("invalid num_examples")
+
+    training_data = get_results(exp_folders[args.exp], subset="val", layer=args.layer, key=args.hidden_key)
+    testing_data = get_results(exp_folders[args.exp], subset="test", layer=args.layer, key=args.hidden_key)
 
     if args.ngram == 0:
         run_same_state(args, training_data, testing_data)
