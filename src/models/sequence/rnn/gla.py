@@ -9,7 +9,7 @@ import torch.nn as nn
 
 # token mixing layer. ~4D^2. 
 class GatedLinearAttention(nn.Module):
-    def __init__(self, d_model, n_heads, layer_idx, use_gk=True, use_gv=False, device=None, dtype=None):
+    def __init__(self, d_model, n_heads, layer_idx=None, use_gk=True, use_gv=True, device=None, dtype=None):
         super().__init__()
         self.embed_dim = d_model
         self.num_heads = n_heads
@@ -118,7 +118,7 @@ class GatedLinearAttention(nn.Module):
         return output
 
 
-    def gated_linear_attention(self, q, k, v, gk, gv, normalizer_gk=16, normalizer_gv=16,  num_head=8, chunk_size=128):
+    def gated_linear_attention(self, q, k, v, gk, gv, normalizer_gk=2, normalizer_gv=2,  num_head=8, chunk_size=128):
         # assert q.dtype == k.dtype == v.dtype == torch.bfloat16
         q = rearrange(q, 'b (n c) (h d) -> b h n c d', h = num_head, c = chunk_size).contiguous()
         k = rearrange(k, 'b (n c) (h d) -> b h n c d', h = num_head, c = chunk_size).contiguous()

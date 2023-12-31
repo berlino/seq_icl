@@ -1,0 +1,29 @@
+program: train.py
+method: grid
+name: hyper_gla
+metric:
+  name: val/loss
+  goal: minimize
+parameters:
+  dataset.num_examples:
+    values: [5000, 1000, 10000, 25000]
+  dataset.num_test_examples:
+    values: [1000]
+  model.d_model:
+    values: [128, 512, 1024]
+  model.attn_cfg.n_heads:
+    values: [1, 2, 4]
+  model.n_layer:
+    values: [2, 4, 8]
+  optimizer.lr:
+    values: [0.00025, 0.0001]
+  optimizer.weight_decay:
+    values: [0.01, 0.1]
+  experiment:
+    values: ["dfa/gla"]
+
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_hyphens}

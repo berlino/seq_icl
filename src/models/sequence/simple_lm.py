@@ -488,8 +488,8 @@ class LMBackbone(nn.Module):
             attention_outputs = None
 
         for layer in self.layers:
-            # hidden_states, residual, attentions = layer(hidden_states, residual)
-            hidden_states, residual, attentions = layer(hidden_states, residual, mixer_kwargs={"input_ids": input_ids})
+            hidden_states, residual, attentions = layer(hidden_states, residual)
+            # hidden_states, residual, attentions = layer(hidden_states, residual, mixer_kwargs={"input_ids": input_ids})
             if return_hidden_outputs:
                 hidden_outputs.append(hidden_states.detach().cpu())
                 if attention_outputs is not None and attentions is not None:
@@ -595,3 +595,52 @@ class SimpleLMHeadModelNoFFN(nn.Module):
         lm_logits = self.lm_head(hidden_states)
         CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
         return CausalLMOutput(logits=lm_logits), hidden_outputs, None
+
+class HybridLMHeadModel(nn.Module):
+    """
+    Flattern the backbone and the head into a single model.
+    """
+    def __init__(self, d_model, vocab_size, layers, device=None, dtype=None, resid_dropout=0.0, embed_dropout=0.1, **kwargs):
+        super().__init__()
+        factory_kwargs = {'device': device, 'dtype': dtype}
+
+        # does not use positional embeddings
+        self.embeddings = GPT2Embeddings(d_model, vocab_size, max_position_embeddings=0, **factory_kwargs)
+
+        nn_layers = []
+        for layer_name in layers:
+            layer_config = layers[layer_name]
+            layer_idx = int(layer_name[5:]) # layer0
+            mixer_layer_config = layer_config["mixer_layer"]
+            d_inner = layer_config["d_inner"]
+            nn_layer = create_block(d_model, d_inner=d_inner, layer=mixer_layer_config,  layer_idx=layer_idx, resid_dropout1=embed_dropout if layer_idx == 0 else resid_dropout, resid_dropout2=resid_dropout, **factory_kwargs)
+            nn_layers.append(nn_layer)
+        self.layers = nn.ModuleList(nn_layers)
+
+        self.drop_f = nn.Dropout(resid_dropout)
+        self.ln_f = nn.LayerNorm(d_model, eps=1e-5, **factory_kwargs)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
+
+        n_layer = len(self.layers)
+        self.apply(partial(_init_weights, n_layer=n_layer))
+        self.tie_weights()
+    
+    def tie_weights(self):
+        self.lm_head.weight = self.embeddings.word_embeddings.weight
+    
+    def forward(self, input_ids, position_ids=None, state=None, return_hidden_outputs=False):
+        assert not return_hidden_outputs # to be supported
+        hidden_states = self.embeddings(input_ids, position_ids=position_ids,)
+        residual = None
+
+        for layer in self.layers:
+            # hidden_states, residual, attentions = layer(hidden_states, residual)
+            hidden_states, residual, attentions = layer(hidden_states, residual, mixer_kwargs={"input_ids": input_ids})
+
+        dropped = self.drop_f(hidden_states)
+        residual = (dropped + residual) if residual is not None else dropped
+        hidden_states = self.ln_f(residual.to(dtype=self.ln_f.weight.dtype))
+
+        lm_logits = self.lm_head(hidden_states)
+        CausalLMOutput = namedtuple('CausalLMOutput', ['logits'])
+        return CausalLMOutput(logits=lm_logits), None, None

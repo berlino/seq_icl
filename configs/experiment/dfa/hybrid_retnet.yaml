@@ -1,0 +1,47 @@
+# @package _global_
+defaults:
+  - /experiment/dfa/base.yaml
+
+model:
+  _name_: hybrid_lm
+  d_model: 128
+  layers: 
+      layer0:
+        mixer_layer:
+          _name_: retention
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer1:
+        mixer_layer:
+          _name_: ngram
+          ngram: 1
+        d_inner: ${eval:1 * ${model.d_model}}
+      layer2:
+        mixer_layer:
+          _name_: ngram
+          ngram: 2
+        d_inner: ${eval:1 * ${model.d_model}}
+      layer3:
+        mixer_layer:
+          _name_: ngram
+          ngram: 3
+        d_inner: ${eval:1 * ${model.d_model}}
+      layer4:
+        mixer_layer:
+          _name_: retention
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer5:
+        mixer_layer:
+          _name_: retention
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer6:
+        mixer_layer:
+          _name_: retention
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer7:
+        mixer_layer:
+          _name_: retention
+        d_inner: ${eval:2 * ${model.d_model}}
+  vocab_size: ${dataset.vocab_size}
+  resid_dropout: 0.0
+  embed_dropout: 0.1
+
