@@ -46,6 +46,7 @@ layer = {
     "rwkv": "src.models.sequence.rnn.rwkv.RWKVLayer",
     "retention": "src.models.sequence.rnn.retention.MultiScaleRetention",
     "mamba": "src.models.sequence.rnn.mamba.MambaLayer",
+    "gla": "src.models.sequence.rnn.gla.GatedLinearAttention",
 }
 
 callbacks = {

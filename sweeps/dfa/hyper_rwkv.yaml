@@ -10,13 +10,13 @@ parameters:
   model.d_model:
     values: [128]
   model.n_layer:
-    values: [4]
+    values: [1, 8, 12]
   optimizer.lr:
-    values: [1e-4, 2.5e-4]
+    values: [2.5e-4]
   optimizer.weight_decay:
     values: [0.1]
   dataset.num_examples:
-    values: [20000]
+    values: [40000, 20000, 10000, 5000]
   experiment:
     values: ["dfa/rwkv"]
 

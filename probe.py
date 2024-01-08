@@ -1,5 +1,6 @@
 import glob
 import os
+import gzip
 import pickle
 
 import matplotlib.pyplot as plt
@@ -27,7 +28,7 @@ import functools
 
 
 def read_one(fname, probs_only=False, layer=None, key=None):
-    with open(fname, "rb") as f:
+    with gzip.open(fname, "rb") as f:
         data =  pickle.load(f)
 
     if probs_only:
@@ -50,14 +51,14 @@ def read_one(fname, probs_only=False, layer=None, key=None):
 
 def read_parallel(file_names, probs_only=False, layer=None, key=None):
     reader = functools.partial(read_one, probs_only=probs_only, layer=layer, key=key)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=16) as executor:
         futures = [executor.submit(reader, f) for f in file_names]
         return [fut.result() for fut in futures]
 
 
 def read_hidden_states(folder, probs_only=False, layer=None, key=None):
-    files = glob.glob(folder + "/*.pkl")
-    ids = [int(os.path.basename(file).replace(".pkl", "")) for file in files]
+    files = glob.glob(folder + "/*.pkl.gz")
+    ids = [int(os.path.basename(file).replace(".pkl.gz", "")) for file in files]
     # sort files with ids
     files = [file for _, file in sorted(zip(ids, files))]
     content = read_parallel(files, probs_only=probs_only, layer=layer, key=key)
@@ -714,26 +715,27 @@ if __name__ == "__main__":
         "retnet": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/retention/generations/106_test.txt",
         "lstm": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/lstm/generations/142_test.txt",
         "linear_transformer": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/linear_transformer/generations/40_test.txt",
-        "hyena": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/hyena/generations/59_test.txt",
+        "hyena": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/hyena/generations/29_test.txt",
         "h3": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/h3/generations/47_test.txt",
-        "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer/generations/176_test.txt",
+        "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_8/generations/176_test.txt",
         "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_2/generations/197_test.txt",
         "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_4/generations/155_test.txt",
         "transformer/1": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_1/generations/13_val.txt",
         "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/mamba/generations/158_test.txt",
+        "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer/generations/194_test.txt",
         # "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/
 
     }
     exp_folders_40000 = {
-        "s4d": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/s4d/generations/144_test.txt",
+        "s4d": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/s4d/generations/183_test.txt",
         "rwkv": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/rwkv/generations/110_test.txt",
-        "retnet": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/retention/generations/36_test.txt",
-        "lstm": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/lstm/generations/174_test.txt",
-        "linear_transformer": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/linear_transformer/generations/117_test.txt",
-        "hyena": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/hyena/generations/28_test.txt",
-        "h3": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/h3/generations/57_test.txt",
+        "retnet": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/retention/generations/26_test.txt",
+        "lstm": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/lstm/generations/164_test.txt",
+        "linear_transformer": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/linear_transformer/generations/65_test.txt",
+        "hyena": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/hyena/generations/47_test.txt",
+        "h3": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/h3/generations/87_test.txt",
         "transformer/1": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_1/generations/133_test.txt",
         "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_2/generations/177_test.txt",
         "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer/generations/184_test.txt",

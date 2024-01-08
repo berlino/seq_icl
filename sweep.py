@@ -71,7 +71,13 @@ if __name__ == "__main__":
     os.makedirs(sweep_folder, exist_ok=True)
     hash_offset = 3
 
-    gpus = {id: None for id in [1,2,3,4,5,6,7,8,9,10,11,12]}
+    # get ids of available cuda devices
+    visible_devices = os.environ["CUDA_VISIBLE_DEVICES_INFO"].split(",")
+    # make int
+    visible_devices = [int(id) for id in visible_devices]
+
+
+    gpus = {id: None for id in visible_devices}
     print(len(sweeps))
     for i, sweep in enumerate(sweeps):
         submitted = False
@@ -87,10 +93,10 @@ if __name__ == "__main__":
                         sweep_hash = hash(sweep) + hash_offset
                         gpus[gpu_id] = sweep_hash
                         command = (
-                            "export PYTHONHASHSEED=0; export"
+                            "export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin; export PYTHONHASHSEED=0; export"
                             f' CUDA_VISIBLE_DEVICES={gpu_id}; python -c "import'
                             ' pykeops; pykeops.clean_pykeops();"; python train.py'
-                            f' wandb.project="{task}_learning_curves_eval" hydra.run.dir="./experiments/{task}/{model_family}/'
+                            f' wandb.project="{task}_learning_curves_eval" wandb.entity=akyurek hydra.run.dir="./experiments/{task}/{model_family}/'
                             '\${now:%Y-%m-%d}/\${now:%H-%M-%S-%f}"'
                             f' {sweep} 1>'
                             f" {sweep_folder}/{sweep_hash}.log 2>"

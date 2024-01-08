@@ -49,9 +49,9 @@ def mask_transition_matrix(T, num_states: int = 144):
     return mask
 
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
+DEVICE = "cpu"
 def forward_backward(observations, log_A, log_B, log_pi, lengths=None, state_mask=None):
     """
     Perform the forward-backward algorithm to compute the forward and backward probabilities.
@@ -274,7 +274,12 @@ def get_posterior_predictions(log_A, log_B, log_pi, observations):
 # Define the observed sequences, number of states, and number of symbols.
 
 
-def predict_with_baumwelch(inputs, vocab, max_states=12):
+def predict_with_baumwelch(inputs, vocab, max_states=12, id=None):
+    if id is not None:
+        # set the device
+        global DEVICE
+        id = id % 8
+        DEVICE = f"cuda:{id}"
     num_states = max_states * max_states
     num_symbols = len(vocab)
     running_probs = []
@@ -282,7 +287,7 @@ def predict_with_baumwelch(inputs, vocab, max_states=12):
     A_mask = get_mask_for_A(torch.zeros((num_states, num_states), device=DEVICE))
     state_mask = mask_transition_matrix(700, num_states=num_states)
 
-    for t in tqdm(range(1, len(inputs) + 1)):
+    for t in range(1, len(inputs) + 1):
         examples = inputs[:t].split("|")
 
         if len(examples[-1]) == 0:

@@ -8,15 +8,15 @@ parameters:
   dataset.num_test_examples:
     values: [1000]
   model.d_model:
-    values: [256, 128]
+    values: [128]
   optimizer.lr:
-    values: [1e-4, 2.5e-4]
+    values: [2.5e-4]
   optimizer.weight_decay:
     values: [0.1]
   model.n_layer:
-    values: [2, 4]
+    values: [12]
   dataset.num_examples:
-    values: [40000]
+    values: [2500]
   experiment:
     values: ["dfa/hyena"]
 

@@ -310,7 +310,7 @@ class ICLDataModule(SequenceDataset):
                 torch.save(test_tensor, os.path.join(self.data_dir,
                     f"test_{self.copy_method}_{self.num_examples}_{self.vocab_size}_{self.input_seq_len}.pt")
                 )
-        breakpoint()
+
         self.dataset = {
             'train': TensorDataset(train_tensor[:, 0, :], train_tensor[:, 1, :]),
             'test': TensorDataset(test_tensor[:, 0, :], test_tensor[:, 1, :])

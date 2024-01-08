@@ -1,6 +1,6 @@
 program: train.py
 method: grid
-name: hyper_ltf
+name: hyper_gla
 metric:
   name: val/loss
   goal: minimize
@@ -8,19 +8,17 @@ parameters:
   dataset.num_test_examples:
     values: [1000]
   model.d_model:
-    values: [256]
-  model.attn_cfg.num_heads:
-    values: [2]
-  model.n_layer:
-    values: [12]
+    values: [64, 128, 256, 512]
   optimizer.lr:
-    values: [0.00025]
+    values: [2.5e-4]
   optimizer.weight_decay:
     values: [0.1]
+  model.n_layer:
+    values: [1, 2, 4, 8, 12]
   dataset.num_examples:
-    values: [20000, 10000, 5000]
+    values: [1000, 2500, 5000, 10000, 20000, 40000]
   experiment:
-    values: ["dfa/linear_transformer"]
+    values: ["dfa/gla"]
 
 command:
   - ${env}

@@ -10,13 +10,13 @@ parameters:
   model.d_model:
     values: [128]
   model.n_layer:
-    values: [4]
+    values: [8]
   optimizer.lr:
     values: [2.5e-4]
   optimizer.weight_decay:
     values: [0.1]
   dataset.num_examples:
-    values: [40000]
+    values: [2500]
   experiment:
     values: ["dfa/h3"]
 

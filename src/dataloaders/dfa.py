@@ -418,7 +418,7 @@ class ICLDFADataModule(SequenceDataset):
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
-            num_workers=10,
+            num_workers=2,
             shuffle=shuffle,
             collate_fn=self._collate_fn,
             persistent_workers=True,
