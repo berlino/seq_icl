@@ -1,6 +1,6 @@
 program: train.py
 method: grid
-name: hyper_retnet
+name: hyper_gla
 metric:
   name: val/accuracy_ignore_index
   goal: maximize
@@ -22,7 +22,7 @@ parameters:
   trainer.max_epochs:
     values: [200]
   experiment:
-    values: ["synthetics/associative_recall/retnet"]
+    values: ["synthetics/associative_recall/gla"]
 
 command:
   - ${env}
