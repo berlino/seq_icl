@@ -24,7 +24,7 @@ model:
       layer3:
         mixer_layer:
           _name_: ngram
-          ngram: 3
+          ngram: 4
         d_inner: ${eval:1 * ${model.d_model}}
       layer4:
         mixer_layer:
