@@ -1,5 +1,16 @@
+# In-context Language Learning: Architectures and Algorithms [WIP]
 
-## Setup
+This repo serves for the experiments for the paper:
+
+Title: [In-context Language Learning: Architectures and Algorithms](/)
+Authors : Ekin Akyürek, Bailin Wang, Yoon Kim, Jacob Andreas
+
+
+## Acknowledgements
+
+This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main). Triton implementations are taken from [linear rnn](https://github.com/sustcsonglin/pytorch_linear_rnn).
+
+
 
 ```bash
 conda create -n seq_icl python=3.11
