@@ -24,6 +24,7 @@ model = {
     "lm": "src.models.sequence.long_conv_lm.ConvLMHeadModel",
     "lm_simple": "src.models.sequence.simple_lm.SimpleLMHeadModel",
     "lm_simple_noffn": "src.models.sequence.simple_lm.SimpleLMHeadModelNoFFN",
+    "hybrid_lm": "src.models.sequence.simple_lm.HybridLMHeadModel",
     "vit_b_16": "src.models.baselines.vit_all.vit_base_patch16_224",
 }
 
@@ -45,8 +46,10 @@ layer = {
     "lstm": "src.models.sequence.rnn.lstm.LSTMLayer",
     "rwkv": "src.models.sequence.rnn.rwkv.RWKVLayer",
     "retention": "src.models.sequence.rnn.retention.MultiScaleRetention",
+    "retentionv2": "src.models.sequence.rnn.retentionv2.MultiScaleRetention",
     "mamba": "src.models.sequence.rnn.mamba.MambaLayer",
     "gla": "src.models.sequence.rnn.gla.GatedLinearAttention",
+    "ngram": "src.models.sequence.rnn.ngram.Ngram",
 }
 
 callbacks = {

@@ -723,6 +723,7 @@ if __name__ == "__main__":
         "transformer/1": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer_1/generations/13_val.txt",
         "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/mamba/generations/158_test.txt",
         "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/transformer/generations/194_test.txt",
+        "gla": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_2500/gla/generations/26_test.txt",
         # "transformer/2": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/12": "/raid/lingo/akyurek/git/iclmodels/experiments/
         # "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/
@@ -742,6 +743,7 @@ if __name__ == "__main__":
         "transformer/4": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_4/generations/194_test.txt",
         "transformer/8": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/transformer_8_w_hiddens/generations/174_test.txt",
         "mamba": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/mamba/generations/196_test.txt",
+        "gla": "/raid/lingo/akyurek/git/iclmodels/experiments/hiddens_40000/gla/generations/54_test.txt",
     }
 
     if args.num_examples == 2500:

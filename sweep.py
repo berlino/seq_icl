@@ -69,7 +69,7 @@ if __name__ == "__main__":
     sweeps = get_sweep(get_config(f"sweeps/{task}/hyper_{model_family}.yaml"))
     sweep_folder = f"hyper/experiments/{task}/{model_family}/"
     os.makedirs(sweep_folder, exist_ok=True)
-    hash_offset = 3
+    hash_offset = 322217
 
     # get ids of available cuda devices
     visible_devices = os.environ["CUDA_VISIBLE_DEVICES_INFO"].split(",")
@@ -96,7 +96,7 @@ if __name__ == "__main__":
                             "export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin; export PYTHONHASHSEED=0; export"
                             f' CUDA_VISIBLE_DEVICES={gpu_id}; python -c "import'
                             ' pykeops; pykeops.clean_pykeops();"; python train.py'
-                            f' wandb.project="{task}_learning_curves_eval" wandb.entity=akyurek hydra.run.dir="./experiments/{task}/{model_family}/'
+                            f' wandb.project="{task}_learning_curves_eval" +wandb.entity=akyurek hydra.run.dir="./experiments/{task}/{model_family}/'
                             '\${now:%Y-%m-%d}/\${now:%H-%M-%S-%f}"'
                             f' {sweep} 1>'
                             f" {sweep_folder}/{sweep_hash}.log 2>"

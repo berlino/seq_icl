@@ -8,7 +8,9 @@ parameters:
   dataset.num_test_examples:
     values: [1000]
   model.d_model:
-    values: [128]
+    values: [128, 256]
+  model.layer.d_state:
+    values: [128, 256]
   model.n_layer:
     values: [8]
   optimizer.lr:
@@ -16,7 +18,7 @@ parameters:
   optimizer.weight_decay:
     values: [0.1]
   dataset.num_examples:
-    values: [2500]
+    values: [1000, 2500, 5000, 10000, 20000, 40000]
   experiment:
     values: ["dfa/h3"]
 
