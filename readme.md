@@ -2,7 +2,7 @@
 
 This repo serves for the experiments for the paper:
 
-Title: [In-context Language Learning: Architectures and Algorithms](/)
+Title: [In-context Language Learning: Architectures and Algorithms](https://arxiv.org/abs/2401.12973)
 
 Authors : Ekin Akyürek, Bailin Wang, Yoon Kim, Jacob Andreas
 
