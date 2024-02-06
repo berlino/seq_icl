@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - /experiment/synthetics/copying/base.yaml
+  - /model/layer: mamba
+
+model:
+  _name_: lm_simple_noffn
+  d_model: 128
+  n_layer: 4
+  d_inner: ${eval:4 * ${.d_model}}
+  vocab_size: ${dataset.vocab_size}
+  resid_dropout: 0.0
+  embed_dropout: 0.1

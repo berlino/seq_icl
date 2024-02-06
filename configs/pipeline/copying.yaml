@@ -1,0 +1,26 @@
+# @package _global_
+defaults:
+  - /trainer: default
+  - /loader: default
+  - /dataset: copying
+  - /optimizer: adamw
+  - /scheduler: cosine_warmup
+  - /callbacks: base
+
+dataset:
+  vocab_size: 30
+  input_seq_len: 300
+  # test_seq_len: 300
+
+train:
+  monitor: val/accuracy_ignore_index
+  mode: max
+
+task:
+  _name_: dfalm
+  loss: cross_entropy
+  torchmetrics: ['perplexity']
+  metrics: ['accuracy_ignore_index']
+
+encoder: null
+decoder: null

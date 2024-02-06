@@ -1,0 +1,41 @@
+# @package _global_
+defaults:
+  - /experiment/synthetics/copying/base.yaml
+
+model:
+  _name_: hybrid_lm
+  d_model: 128
+  layers:
+      layer0:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer1:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer2:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer3:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer4:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+      layer5:
+        mixer_layer:
+          _name_: gla
+          n_heads: 2
+        d_inner: ${eval:2 * ${model.d_model}}
+  vocab_size: ${dataset.vocab_size}
+  resid_dropout: 0.0
+  embed_dropout: 0.1

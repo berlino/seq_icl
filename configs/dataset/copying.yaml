@@ -1,0 +1,7 @@
+_name_: copying
+num_examples: 10000
+num_test_examples: 1000
+vocab_size: 30
+input_seq_len: 300
+__train_len: ${.num_examples}
+__l_max: ${eval:2 * ${.input_seq_len} + 3}
