@@ -96,7 +96,7 @@ if __name__ == "__main__":
                             "export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin; export PYTHONHASHSEED=0; export"
                             f' CUDA_VISIBLE_DEVICES={gpu_id}; python -c "import'
                             ' pykeops; pykeops.clean_pykeops();"; python train.py'
-                            f' wandb.project="{task}_learning_curves_eval" +wandb.entity=akyurek hydra.run.dir="./experiments/{task}/{model_family}/'
+                            f' wandb.project="{task}_delta" +wandb.entity=bailin hydra.run.dir="./experiments/{task}/{model_family}/'
                             '\${now:%Y-%m-%d}/\${now:%H-%M-%S-%f}"'
                             f' {sweep} 1>'
                             f" {sweep_folder}/{sweep_hash}.log 2>"

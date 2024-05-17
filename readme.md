@@ -39,6 +39,11 @@ git checkout v1.0.2  # this is the highest compatible version allowed by Mamba
 CAUSAL_CONV1D_FORCE_BUILD=TRUE pip install .
 ```
 
+### Experiments for DeltaNet
+
+* the fused_chunk kernel does not work for some reason
+* adding a model requires adding a layer, a model, an experiment and a sweep file.
+
 ### Acknowledgements
 
 This repo is adapted from [safari](https://github.com/HazyResearch/safari/tree/main). Triton implementations are taken from [linear rnn](https://github.com/sustcsonglin/pytorch_linear_rnn).

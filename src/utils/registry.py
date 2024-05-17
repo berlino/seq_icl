@@ -50,6 +50,7 @@ layer = {
     "mamba": "src.models.sequence.rnn.mamba.MambaLayer",
     "gla": "src.models.sequence.rnn.gla.GatedLinearAttention",
     "ngram": "src.models.sequence.rnn.ngram.Ngram",
+    "delta": "src.models.sequence.rnn.delta.DeltaLayer",
 }
 
 callbacks = {
