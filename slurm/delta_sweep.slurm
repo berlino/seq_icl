@@ -17,4 +17,6 @@ export CUDA_VISIBLE_DEVICES=0
 export CUDA_VISIBLE_DEVICES_INFO=0
 export OMP_NUM_THREADS=8
 
-python sweep.py --model_family delta --task dfa
+# python sweep.py --model_family delta --task dfa
+# python sweep.py --model_family gla --task dfa
+python sweep.py --model_family mamba --task dfa

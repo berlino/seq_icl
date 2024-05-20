@@ -11,14 +11,18 @@ parameters:
     values: [256, 512, 1024]
   optimizer.lr:
     values: [2.5e-4]
-  model.attn_cfg.n_heads:
-    values: [2]
+  model.attn_cfg.num_heads:
+    values: [1, 2]
+  model.attn_cfg.use_output_gate:
+    values: [false, true]
+  model.attn_cfg.use_short_conv:
+    values: [true]
   optimizer.weight_decay:
     values: [0.1]
   model.n_layer:
-    values: [8, 12]
+    values: [4, 8, 12]
   dataset.num_examples:
-    values: [40000]
+    values: [40000, 20000, 10000, 5000, 2500, 1000]
   experiment:
     values: ["dfa/gla"]
 

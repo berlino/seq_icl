@@ -43,6 +43,8 @@ CAUSAL_CONV1D_FORCE_BUILD=TRUE pip install .
 
 * the fused_chunk kernel does not work for some reason
 * adding a model requires adding a layer, a model, an experiment and a sweep file.
+* gla is updated from fla, which involves changing output format of forward, and make d\_model the first argument.
+* for mamba w/o shortconv, two changes: 1) use_fast_path=False 2) comment out the shortconv part in simple\_mamba.py.
 
 ### Acknowledgements
 

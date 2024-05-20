@@ -9,6 +9,7 @@ class MambaLayer(nn.Module):
             d_state=16,
             d_conv=4,
             expand=2,
+            use_fast_path=False,
         )
 
     def forward(self, x, return_attention=False, input_ids=None):
